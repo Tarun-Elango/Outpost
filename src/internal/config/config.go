@@ -12,7 +12,7 @@ import (
 const (
 	// fallbackServerURL is used when SERVER_URL is not found in the environment
 	// or in a .env.local file. Primary configuration lives in .env.local.
-	fallbackServerURL = "https://api.devbox.io"
+	fallbackServerURL = "http://localhost:8080"
 	configDir         = ".devbox"
 	configFile        = "config.json"
 )

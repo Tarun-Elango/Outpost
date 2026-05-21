@@ -32,12 +32,12 @@ func readPublicKey() (string, error) {
 
 // Box represents a devbox instance as returned by the API.
 type Box struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Status    string `json:"status"`
-	IP        string `json:"ip"`
-	Template  string `json:"template"`
-	CreatedAt string `json:"createdAt"`
+	ID               string `json:"instanceId"`
+	Name             string `json:"name"`
+	Status           string `json:"state"`
+	InstanceType     string `json:"instanceType"`
+	PublicIP         string `json:"publicIpAddress"`
+	PrivateIP        string `json:"privateIpAddress"`
 }
 
 // Ls lists all boxes belonging to the authenticated user.
@@ -73,10 +73,10 @@ func Ls() {
 		return
 	}
 
-	fmt.Printf("%-24s  %-20s  %-10s  %-16s  %s\n", "ID", "NAME", "STATUS", "IP", "CREATED")
-	fmt.Println(strings.Repeat("-", 90))
+	fmt.Printf("%-24s  %-20s  %-10s  %-16s\n", "ID", "NAME", "STATUS", "PUBLIC IP")
+	fmt.Println(strings.Repeat("-", 80))
 	for _, b := range boxes {
-		fmt.Printf("%-24s  %-20s  %-10s  %-16s  %s\n", b.ID, b.Name, b.Status, b.IP, b.CreatedAt)
+		fmt.Printf("%-24s  %-20s  %-10s  %-16s\n", b.ID, b.Name, b.Status, b.PublicIP)
 	}
 }
 
@@ -117,9 +117,9 @@ func Status(args []string) {
 	fmt.Printf("ID:        %s\n", b.ID)
 	fmt.Printf("Name:      %s\n", b.Name)
 	fmt.Printf("Status:    %s\n", b.Status)
-	fmt.Printf("IP:        %s\n", b.IP)
-	fmt.Printf("Template:  %s\n", b.Template)
-	fmt.Printf("Created:   %s\n", b.CreatedAt)
+	fmt.Printf("Public IP:  %s\n", b.PublicIP)
+	fmt.Printf("Private IP: %s\n", b.PrivateIP)
+	fmt.Printf("Type:       %s\n", b.InstanceType)
 }
 
 // Create creates a new box with an optional name and streams progress via WebSocket.
@@ -128,10 +128,11 @@ func Create(args []string) {
 		fmt.Println("[test] create: done")
 		return
 	}
-	body := map[string]string{}
-	if len(args) >= 1 {
-		body["name"] = args[0]
+	if len(args) < 1 || strings.TrimSpace(args[0]) == "" {
+		fmt.Fprintln(os.Stderr, "usage: devbox create <name>")
+		os.Exit(1)
 	}
+	body := map[string]string{"name": strings.TrimSpace(args[0])}
 
 	// Include the user's public key if available, so they can SSH in without extra setup.
 	if pubKey, err := readPublicKey(); err != nil {
@@ -311,6 +312,14 @@ func Delete(args []string) {
 		os.Exit(1)
 	}
 	id := args[0]
+
+	fmt.Printf("Are you sure you want to delete box %s? [y/N] ", id)
+	var answer string
+	fmt.Scanln(&answer)
+	if answer != "y" {
+		fmt.Println("Aborted.")
+		return
+	}
 
 	client, err := api.NewDefault()
 	if err != nil {

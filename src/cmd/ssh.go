@@ -83,7 +83,7 @@ func SSH(args []string) {
 		os.Exit(1)
 	}
 
-	if b.IP == "" {
+	if b.PublicIP == "" {
 		fmt.Fprintln(os.Stderr, "ssh: box has no IP address (is it running?)")
 		os.Exit(1)
 	}
@@ -98,7 +98,7 @@ func SSH(args []string) {
 		os.Exit(1)
 	}
 
-	target := fmt.Sprintf("%s@%s", *user, b.IP)
+	target := fmt.Sprintf("%s@%s", *user, b.PublicIP)
 	portArg := fmt.Sprintf("%d", *port)
 
 	// argv will be something like: ["ssh", "-p", "2222", "-i", "/path/to/key", "root@"<|...|> ]
