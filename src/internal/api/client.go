@@ -27,6 +27,17 @@ func New(baseURL, token string) *Client {
 	}
 }
 
+// NewWithTimeout creates a Client with a custom HTTP timeout.
+// Use this for long-blocking calls such as box creation, which waits for EC2
+// status checks to pass before returning (can take several minutes).
+func NewWithTimeout(baseURL, token string, timeout time.Duration) *Client {
+	return &Client{
+		httpClient: &http.Client{Timeout: timeout},
+		baseURL:    baseURL,
+		token:      token,
+	}
+}
+
 // NewDefault creates a Client by loading config from ~/.devbox/config.json.
 func NewDefault() (*Client, error) {
 	cfg, err := config.Load()

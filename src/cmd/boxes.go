@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"devbox-cli/internal/api"
 	"devbox-cli/internal/config"
@@ -138,7 +139,7 @@ func Create(args []string) {
 	if pubKey, err := readPublicKey(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: %v; box will be created without your public key\n", err)
 	} else {
-		body["public_key"] = pubKey
+		body["publicKey"] = pubKey
 	}
 
 	cfg, err := config.Load()
@@ -147,7 +148,10 @@ func Create(args []string) {
 		os.Exit(1)
 	}
 
-	client := api.New(cfg.ServerURL, cfg.Token)
+	// Use a long timeout: the server blocks until EC2 status checks pass (up to ~10 min).
+	client := api.NewWithTimeout(cfg.ServerURL, cfg.Token, 15*time.Minute)
+
+	fmt.Printf("Creating box %q — waiting for it to be ready (this may take a few minutes)...\n", strings.TrimSpace(args[0]))
 
 	resp, err := client.Post("/v1/boxes", body)
 	if err != nil {
@@ -165,13 +169,12 @@ func Create(args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Created box %s (%s). Waiting for it to start...\n", b.Name, b.ID)
-
-	// Watch the box's status via WebSocket until it reaches a terminal state.
-	if err := watchBox(cfg.ServerURL, cfg.Token, b.ID); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not watch box status: %v\n", err)
-		fmt.Printf("Box ID: %s\n", b.ID)
-		return
+	fmt.Printf("Box is ready.\n")
+	fmt.Printf("  ID:        %s\n", b.ID)
+	fmt.Printf("  Name:      %s\n", b.Name)
+	if b.PublicIP != "" {
+		fmt.Printf("  Public IP: %s\n", b.PublicIP)
+		fmt.Printf("\n  Connect:   devbox ssh %s\n", b.ID)
 	}
 }
 
@@ -179,7 +182,7 @@ func Create(args []string) {
 // status events until the box reaches a terminal state or the server closes
 // the connection.
 func watchBox(serverURL, token, boxID string) error {
-	wsURL := httpToWS(serverURL) + "/v1/boxes/" + boxID + "/watch"
+	wsURL := httpToWS(serverURL) + "/v1/boxes/" + boxID + "/status"
 
 	conn, err := ws.Dial(wsURL, token)
 	if err != nil {

@@ -34,11 +34,11 @@ func SSH(args []string) {
 		return
 	}
 	fs := flag.NewFlagSet("ssh", flag.ExitOnError)
-	user := fs.String("u", "root", "SSH username")
+	user := fs.String("u", "ec2-user", "SSH username")
 	port := fs.Int("p", 22, "SSH port")
 	identity := fs.String("i", defaultKeyPath(), "path to SSH private key")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: devbox ssh [-u user] [-p port] [-i identity] <id> [-- ssh-args...]")
+		fmt.Fprintln(os.Stderr, "usage: devbox ssh -v -i [-u user] [-p port] [-i identity] <id> [-- ssh-args...]")
 		fs.PrintDefaults()
 	}
 
@@ -101,8 +101,13 @@ func SSH(args []string) {
 	target := fmt.Sprintf("%s@%s", *user, b.PublicIP)
 	portArg := fmt.Sprintf("%d", *port)
 
-	// argv will be something like: ["ssh", "-p", "2222", "-i", "/path/to/key", "root@"<|...|> ]
-	argv := []string{sshBin, "-p", portArg}
+	fmt.Fprintf(os.Stderr, "Connecting to %s (box %s)...\n", target, id)
+
+	argv := []string{sshBin,
+		"-p", portArg,
+		"-o", "ConnectTimeout=15",
+		"-o", "StrictHostKeyChecking=accept-new",
+	}
 	// identity is optional, so only include it if the user specified one (either via -i or defaultKeyPath).
 	if *identity != "" {
 		argv = append(argv, "-i", *identity)
