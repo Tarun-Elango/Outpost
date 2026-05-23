@@ -59,7 +59,8 @@ func Login(args []string) {
 	}
 
 	var result struct {
-		Token string `json:"token"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refreshToken"`
 	}
 	if err := api.DecodeJSON(resp, &result); err != nil {
 		fmt.Fprintf(os.Stderr, "login failed: %v\n", err)
@@ -71,12 +72,95 @@ func Login(args []string) {
 	}
 
 	cfg.Token = result.Token
-	if err := config.Save(cfg); err != nil {
+	cfg.RefreshToken = result.RefreshToken
+	cfg.TokenExpiry = config.ParseTokenExpiry(result.Token)
+	if err := config.Save(cfg); err != nil {. // writes to ./devbox/config.json
 		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Println("Logged in successfully.")
+}
+
+// Signup prompts for credentials, POSTs to /v1/auth/signup, and saves the returned token.
+func Signup(args []string) {
+	if TestMode {
+		fmt.Println("[test] signup: done")
+		return
+	}
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print("Username: ")
+	username, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error reading username: %v\n", err)
+		os.Exit(1)
+	}
+	username = strings.TrimSpace(username)
+
+	password, err := readPassword("Password: ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error reading password: %v\n", err)
+		os.Exit(1)
+	}
+
+	confirm, err := readPassword("Confirm password: ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error reading password confirmation: %v\n", err)
+		os.Exit(1)
+	}
+	if len(password) < 8 {
+		fmt.Fprintln(os.Stderr, "signup failed: password must be at least 8 characters")
+		os.Exit(1)
+	}
+	if password != confirm {
+		fmt.Fprintln(os.Stderr, "signup failed: passwords do not match")
+		os.Exit(1)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	client := api.New(cfg.ServerURL, "")
+
+	resp, err := client.Post("/v1/auth/signup", map[string]string{
+		"username": username,
+		"password": password,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "signup failed: %v\n", err)
+		os.Exit(1)
+	}
+	if err := api.CheckStatus(resp); err != nil {
+		fmt.Fprintf(os.Stderr, "signup failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	var result struct {
+		Token        string `json:"token"`
+		RefreshToken string `json:"refreshToken"`
+	}
+	if err := api.DecodeJSON(resp, &result); err != nil {
+		fmt.Fprintf(os.Stderr, "signup failed: %v\n", err)
+		os.Exit(1)
+	}
+	if result.Token == "" {
+		fmt.Fprintln(os.Stderr, "signup failed: server did not return a token")
+		os.Exit(1)
+	}
+
+	cfg.Token = result.Token
+	cfg.RefreshToken = result.RefreshToken
+	cfg.TokenExpiry = config.ParseTokenExpiry(result.Token)
+	if err := config.Save(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Account created and logged in.")
 }
 
 // Logout POSTs to /v1/auth/logout and clears the locally stored token.
