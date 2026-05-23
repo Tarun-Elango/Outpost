@@ -124,16 +124,41 @@ func Status(args []string) {
 }
 
 // Create creates a new box with an optional name and streams progress via WebSocket.
+// Pass --from <snapshot_id> to restore from a previously saved snapshot.
 func Create(args []string) {
 	if TestMode {
 		fmt.Println("[test] create: done")
 		return
 	}
-	if len(args) < 1 || strings.TrimSpace(args[0]) == "" {
-		fmt.Fprintln(os.Stderr, "usage: devbox create <name>")
+
+	// Parse positional name and optional --from <snapshot_id> flag.
+	var name, fromSnapshot string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--from":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "error: --from requires a snapshot id")
+				os.Exit(1)
+			}
+			i++
+			fromSnapshot = args[i]
+		default:
+			if name == "" {
+				name = strings.TrimSpace(args[i])
+			}
+		}
+	}
+
+	if name == "" {
+		fmt.Fprintln(os.Stderr, "usage: devbox create <name> [--from <snapshot_id>]")
 		os.Exit(1)
 	}
-	body := map[string]string{"name": strings.TrimSpace(args[0])}
+
+	body := map[string]string{"name": name}
+
+	if fromSnapshot != "" {
+		body["fromSnapshot"] = fromSnapshot
+	}
 
 	// Include the user's public key if available, so they can SSH in without extra setup.
 	if pubKey, err := readPublicKey(); err != nil {
@@ -151,7 +176,11 @@ func Create(args []string) {
 	// Use a long timeout: the server blocks until EC2 status checks pass (up to ~10 min).
 	client := api.NewWithTimeout(cfg.ServerURL, cfg.Token, 15*time.Minute)
 
-	fmt.Printf("Creating box %q — waiting for it to be ready (this may take a few minutes)...\n", strings.TrimSpace(args[0]))
+	if fromSnapshot != "" {
+		fmt.Printf("Restoring box %q from snapshot %s — waiting for it to be ready (this may take a few minutes)...\n", name, fromSnapshot)
+	} else {
+		fmt.Printf("Creating box %q — waiting for it to be ready (this may take a few minutes)...\n", name)
+	}
 
 	resp, err := client.Post("/v1/boxes", body)
 	if err != nil {

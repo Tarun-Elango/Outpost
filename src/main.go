@@ -13,7 +13,7 @@ func usage() {
 Commands:
   login               Authenticate with the devbox server
   logout              Clear saved credentials
-  create [name]       Create a new box
+  create <name> [--from <snapshot_id>]  Create a new box (optionally restore from snapshot)
   ls                  List all boxes
   status <id>         Show details for a box
   stop <id>           Stop a running box
