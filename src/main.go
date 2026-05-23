@@ -12,6 +12,7 @@ func usage() {
 
 Commands:
   login               Authenticate with the devbox server
+  signup              Create a new account
   logout              Clear saved credentials
   create <name> [--from <snapshot_id>]  Create a new box (optionally restore from snapshot)
   ls                  List all boxes
@@ -48,6 +49,8 @@ func main() {
 	switch command {
 	case "login":
 		cmd.Login(args)
+	case "signup":
+		cmd.Signup(args)
 	case "logout":
 		cmd.Logout()
 	case "create":
