@@ -22,8 +22,10 @@ Commands:
   delete <id>         Delete a box
   ssh <id>            Open an SSH session to a box
   forward <id> <port> Forward a port from a box
-  snapshot <id>       Create a snapshot of a box
-  templates           List available templates
+  snapshot <id> [name]       Create a snapshot of a box
+  snapshots                  List all your snapshots
+  snapshots ls <boxId>       List snapshots for a specific box
+  snapshots delete <amiId>   Delete a snapshot
 `)
 }
 
@@ -71,8 +73,8 @@ func main() {
 		cmd.Forward(args)
 	case "snapshot":
 		cmd.Snapshot(args)
-	case "templates":
-		cmd.Templates()
+	case "snapshots":
+		cmd.Snapshots(args)
 	default:
 		fmt.Fprintf(os.Stderr, "devbox: unknown command %q\n\n", command)
 		usage()
