@@ -5,11 +5,10 @@ Cli to manage your dev boxes
 ## Build
 
 ```bash
-cd src
 go build -o devbox .
 ```
 
-This produces a `devbox` binary in `src/`.
+This produces a `devbox` binary.
 
 To install it to your `$GOPATH/bin`:
 
