@@ -59,9 +59,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="latest-$(date +'%Y%m%d-%H%M%S')"
-          git tag "$tag"
-          git push origin "$tag"
-          gh release create "$tag" devbox \
-            --title "Latest build $tag" \
-            --notes "Auto-generated build from main"
+          git tag -f latest
+          git push origin latest --force
+          gh release create latest devbox \
+            --title "Latest build" \
+            --notes "Auto-generated build from main" \
+            --latest
