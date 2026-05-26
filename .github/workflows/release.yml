@@ -40,7 +40,7 @@ jobs:
             latest_tag=""
           fi
 
-        echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+          echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
 
       - name: Delete latest release (if exists)
         if: steps.latest.outputs.latest_tag != ''
