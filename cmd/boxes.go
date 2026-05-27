@@ -127,31 +127,10 @@ func Create(args []string) {
 		return
 	}
 
-	// Parse positional name and optional --from <snapshot_ami_id> flag.
-	var name, fromSnapshot string
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--from":
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "error: --from requires a snapshot AMI ID")
-				os.Exit(1)
-			}
-			i++
-			fromSnapshot = args[i]
-		default:
-			if name == "" {
-				name = strings.TrimSpace(args[i])
-			}
-		}
-	}
-
-	if name == "" {
+	name, fromSnapshot, err := ParseNameAndFromFlag(args) // should have at least name
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		fmt.Fprintln(os.Stderr, "usage: devbox create <name> [--from <snapshot_ami_id>]")
-		os.Exit(1)
-	}
-	// name cannot start with -- 
-	if strings.HasPrefix(name, "--") {
-		fmt.Fprintln(os.Stderr, "error: name cannot start with --")
 		os.Exit(1)
 	}
 

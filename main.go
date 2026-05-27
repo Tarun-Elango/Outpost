@@ -14,7 +14,7 @@ Commands:
   login               Authenticate with the devbox server
   signup              Create a new account
   logout              Clear saved credentials
-  create <name> --from <snapshot_ami_id>  Create a new box (optionally restore from snapshot)
+  create <name> [--from <snapshot_ami_id>]  Create a new box (optionally restore from snapshot)
   ls                  List all boxes
   status <id>         Show details for a box
   stop <id>           Stop a running box
@@ -30,6 +30,15 @@ Commands:
   templates                  List available templates
   create --template <templateId> <name> Create a new box from a template with a name
   create --template <templateId> <name> --from <snapshot_ami_id> Create a new box from a template with a name and restore from a snapshot
+
+  schedule (start|stop) <id> --at <RFC3339>              Start box once at time
+  schedule (start|stop) <id> --cron "<expr>" [--tz TZ]   Recurring start (cron + optional IANA TZ)
+  schedule (start|stop) <id> --daily HH:MM [--tz TZ]         Every day at HH:MM (optional sugar)
+  schedule (start|stop) <id> --weekdays HH:MM [--tz TZ]      Mon–Fri at HH:MM
+  schedule list                                   List schedules (id, box, action, next run, paused)
+  schedule pause <scheduleId>                     Pause a schedule
+  schedule resume <scheduleId>                    Resume a schedule
+  schedule delete <scheduleId>                    Delete a schedule
   `)
 }
 
@@ -87,3 +96,26 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+
+/*
+# One-shot: stop tonight at 6pm UTC
+devbox schedule stop i-0abc123 --at 2026-05-27T18:00:00Z
+
+# One-shot: start tomorrow 9am in local TZ
+devbox schedule start i-0abc123 --at 2026-05-28T09:00:00-05:00
+
+# Recurring: stop weekdays at 6pm, start weekdays at 9am (two schedules)
+devbox schedule stop  i-0abc123 --cron "0 18 * * MON-FRI" --tz America/New_York
+devbox schedule start i-0abc123 --cron "0 9 * * MON-FRI"  --tz America/New_York
+
+
+┌──────── minute (0–59)
+│ ┌────── hour (0–23)
+│ │ ┌──── day of month (*)
+│ │ │ ┌── month (*)
+│ │ │ │ ┌ day of week (MON–SUN or 0–6)
+│ │ │ │ │
+0 18 * * *        → every day 18:00
+0 9  * * MON-FRI  → Mon–Fri 09:00
+*/
