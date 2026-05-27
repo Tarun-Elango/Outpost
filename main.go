@@ -79,6 +79,8 @@ func main() {
 		cmd.Snapshot(args)
 	case "snapshots":
 		cmd.Snapshots(args)
+	case "templates":
+		cmd.Templates(args)
 	default:
 		fmt.Fprintf(os.Stderr, "devbox: unknown command %q\n\n", command)
 		usage()

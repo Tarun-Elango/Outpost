@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -165,6 +166,12 @@ func (c *Client) Post(path string, body any) (*http.Response, error) {
 // Delete performs a DELETE request to the given API path.
 func (c *Client) Delete(path string) (*http.Response, error) {
 	return c.do(http.MethodDelete, path, nil)
+}
+
+// FailBox prints a clean error for a box subcommand and exits.
+func FailBox(cmd string, err error) {
+	fmt.Fprintf(os.Stderr, "%s failed: %s\n", cmd, err)
+	os.Exit(1)
 }
 
 // DecodeJSON reads and closes the response body, decoding it as JSON into dst.

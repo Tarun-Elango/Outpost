@@ -38,12 +38,6 @@ type Box struct {
 	PrivateIP        string `json:"privateIpAddress"`
 }
 
-// failBox prints a clean error for a box subcommand and exits.
-func failBox(cmd string, err error) {
-	fmt.Fprintf(os.Stderr, "%s failed: %s\n", cmd, err)
-	os.Exit(1)
-}
-
 // Ls lists all boxes belonging to the authenticated user.
 func Ls() {
 	if TestMode {
@@ -58,15 +52,15 @@ func Ls() {
 
 	resp, err := client.Get("/v1/boxes")
 	if err != nil {
-		failBox("ls", err)
+		api.FailBox("ls", err)
 	}
 	if err := api.CheckStatus(resp); err != nil {
-		failBox("ls", err)
+		api.FailBox("ls", err)
 	}
 
 	var boxes []Box
 	if err := api.DecodeJSON(resp, &boxes); err != nil {
-		failBox("ls", err)
+		api.FailBox("ls", err)
 	}
 
 	if len(boxes) == 0 {
@@ -101,15 +95,15 @@ func Status(args []string) {
 
 	resp, err := client.Get("/v1/boxes/" + id)
 	if err != nil {
-		failBox("status", err)
+		api.FailBox("status", err)
 	}
 	if err := api.CheckStatus(resp); err != nil {
-		failBox("status", err)
+		api.FailBox("status", err)
 	}
 
 	var b Box
 	if err := api.DecodeJSON(resp, &b); err != nil {
-		failBox("status", err)
+		api.FailBox("status", err)
 	}
 
 	fmt.Printf("ID:        %s\n", b.ID)
@@ -181,15 +175,15 @@ func Create(args []string) {
 
 	resp, err := client.Post("/v1/boxes", body)
 	if err != nil {
-		failBox("create", err)
+		api.FailBox("create", err)
 	}
 	if err := api.CheckStatus(resp); err != nil {
-		failBox("create", err)
+		api.FailBox("create", err)
 	}
 
 	var b Box
 	if err := api.DecodeJSON(resp, &b); err != nil {
-		failBox("create", err)
+		api.FailBox("create", err)
 	}
 
 	fmt.Printf("Box is ready.\n")
@@ -233,10 +227,10 @@ func Stop(args []string) {
 
 	resp, err := client.Post("/v1/boxes/"+id+"/stop", nil)
 	if err != nil {
-		failBox("stop", err)
+		api.FailBox("stop", err)
 	}
 	if err := api.CheckStatus(resp); err != nil {
-		failBox("stop", err)
+		api.FailBox("stop", err)
 	}
 	resp.Body.Close()
 
@@ -263,10 +257,10 @@ func Start(args []string) {
 
 	resp, err := client.Post("/v1/boxes/"+id+"/start", nil)
 	if err != nil {
-		failBox("start", err)
+		api.FailBox("start", err)
 	}
 	if err := api.CheckStatus(resp); err != nil {
-		failBox("start", err)
+		api.FailBox("start", err)
 	}
 	resp.Body.Close()
 
@@ -301,10 +295,10 @@ func Delete(args []string) {
 
 	resp, err := client.Delete("/v1/boxes/" + id)
 	if err != nil {
-		failBox("delete", err)
+		api.FailBox("delete", err)
 	}
 	if err := api.CheckStatus(resp); err != nil {
-		failBox("delete", err)
+		api.FailBox("delete", err)
 	}
 	resp.Body.Close()
 
