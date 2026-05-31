@@ -6,9 +6,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"devbox-cli/internal/api"
+)
+
+const (
+	devboxReadyPath    = "/var/lib/devbox/ready"
+	devboxReadyMessage = "the user data script is completed"
 )
 
 // defaultKeyPath returns the path to the user's default SSH private key,
@@ -27,7 +33,38 @@ func defaultKeyPath() string {
 	return ""
 }
 
-// SSH fetches the box's IP address and execs ssh, replacing the current process.
+// SshStatusResponse is returned by GET /v2/boxes/{id}/ssh-status.
+type SshStatusResponse struct {
+	Ready    bool `json:"ready"`
+	Instance *Box `json:"instance"`
+}
+
+func sshBaseArgs(identity, portArg string) []string {
+	argv := []string{
+		"-p", portArg,
+		"-o", "ConnectTimeout=15",
+		"-o", "StrictHostKeyChecking=accept-new", // TODO: StrictHostKeyChecking=yes plus managing known_hosts
+	}
+	if identity != "" {
+		argv = append([]string{"-i", identity}, argv...)
+	}
+	return argv
+}
+
+// checkDevboxReady runs one SSH probe for the user-data ready marker.
+func checkDevboxReady(sshBin, identity, user, host, portArg string) bool {
+	target := fmt.Sprintf("%s@%s", user, host)
+	argv := append([]string{sshBin}, sshBaseArgs(identity, portArg)...)
+	argv = append(argv,
+		"-o", "BatchMode=yes",
+		target,
+		"cat", devboxReadyPath,
+	)
+	out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+	return err == nil && strings.TrimSpace(string(out)) == devboxReadyMessage
+}
+
+// SSH checks EC2 health and the devbox ready marker, then execs ssh.
 func SSH(args []string) {
 	if TestMode {
 		fmt.Println("[test] ssh: done")
@@ -67,7 +104,7 @@ func SSH(args []string) {
 		os.Exit(1)
 	}
 
-	resp, err := client.Get("/v1/boxes/" + id)
+	resp, err := client.Get("/v2/boxes/" + id + "/ssh-status") // check the two conditions from server
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ssh: %v\n", err)
 		os.Exit(1)
@@ -77,12 +114,22 @@ func SSH(args []string) {
 		os.Exit(1)
 	}
 
-	var b Box
-	if err := api.DecodeJSON(resp, &b); err != nil {
+	var status SshStatusResponse // check response type
+	if err := api.DecodeJSON(resp, &status); err != nil {
 		fmt.Fprintf(os.Stderr, "ssh: %v\n", err)
 		os.Exit(1)
 	}
 
+	if !status.Ready {
+		fmt.Fprintln(os.Stderr, "ssh: box is not ready yet (EC2 status checks still pending)")
+		os.Exit(1)
+	}
+	if status.Instance == nil {
+		fmt.Fprintln(os.Stderr, "ssh: server reported ready but returned no instance details, try the command again in a few minutes.")
+		os.Exit(1)
+	}
+
+	b := *status.Instance
 	if b.PublicIP == "" {
 		fmt.Fprintln(os.Stderr, "ssh: box has no IP address (is it running?)")
 		os.Exit(1)
@@ -92,7 +139,7 @@ func SSH(args []string) {
 		os.Exit(1)
 	}
 
-	sshBin, err := exec.LookPath("ssh") // LookPath only returns an error if the binary isn't found, so we don't need to check for exec.ErrNotFound specifically.
+	sshBin, err := exec.LookPath("ssh")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ssh: ssh binary not found in PATH")
 		os.Exit(1)
@@ -101,17 +148,14 @@ func SSH(args []string) {
 	target := fmt.Sprintf("%s@%s", *user, b.PublicIP)
 	portArg := fmt.Sprintf("%d", *port)
 
+	if !checkDevboxReady(sshBin, *identity, *user, b.PublicIP, portArg) {
+		fmt.Fprintln(os.Stderr, "ssh: devbox is not ready yet — try again in a minute")
+		os.Exit(1)
+	}
+
 	fmt.Fprintf(os.Stderr, "Connecting to %s (box %s)...\n", target, id)
 
-	argv := []string{sshBin,
-		"-p", portArg,
-		"-o", "ConnectTimeout=15",
-		"-o", "StrictHostKeyChecking=accept-new", // TODO: StrictHostKeyChecking=yes plus managing known_hosts
-	}
-	// identity is optional, so only include it if the user specified one (either via -i or defaultKeyPath).
-	if *identity != "" {
-		argv = append(argv, "-i", *identity)
-	}
+	argv := append([]string{sshBin}, sshBaseArgs(*identity, portArg)...) // create ssh command
 	argv = append(argv, target)
 	argv = append(argv, extra...)
 

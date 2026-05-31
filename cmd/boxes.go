@@ -5,10 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-
 	"devbox-cli/internal/api"
-	"devbox-cli/internal/config"
 )
 
 // readPublicKey returns the contents of the user's default SSH public key,
@@ -114,7 +111,7 @@ func Status(args []string) {
 	fmt.Printf("Type:       %s\n", b.InstanceType)
 }
 
-// Create creates a new box with an optional name and streams progress via WebSocket.
+// Create creates a new box with an optional name and returns as soon as EC2 accepts the launch.
 // Pass --from <snapshot_ami_id> to restore from a previously saved snapshot.
 func Create(args []string) {
 	if len(args) > 0 && args[0] == "--template" {
@@ -147,22 +144,19 @@ func Create(args []string) {
 		body["publicKey"] = pubKey
 	}
 
-	cfg, err := config.Load()
+	client, err := api.NewDefault()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Use a long timeout: the server blocks until EC2 status checks pass (up to ~10 min).
-	client := api.NewWithTimeout(cfg.ServerURL, cfg.Token, 15*time.Minute)
-
 	if fromSnapshot != "" {
-		fmt.Printf("Restoring box %q from snapshot AMI %s - waiting for it to be ready (this may take a few minutes)...\n", name, fromSnapshot)
+		fmt.Printf("Creating box %q from snapshot AMI %s...\n", name, fromSnapshot)
 	} else {
-		fmt.Printf("Creating box %q — waiting for it to be ready (this may take a few minutes)...\n", name)
+		fmt.Printf("Creating box %q...\n", name)
 	}
 
-	resp, err := client.Post("/v1/boxes", body)
+	resp, err := client.Post("/v2/boxes", body)
 	if err != nil {
 		api.FailBox("create", err)
 	}
@@ -175,12 +169,15 @@ func Create(args []string) {
 		api.FailBox("create", err)
 	}
 
-	fmt.Printf("Box is ready.\n")
+	fmt.Printf("Box created.\n")
 	fmt.Printf("  ID:        %s\n", b.ID)
 	fmt.Printf("  Name:      %s\n", b.Name)
+	fmt.Printf("  Status:    %s\n", b.Status)
 	if b.PublicIP != "" {
 		fmt.Printf("  Public IP: %s\n", b.PublicIP)
 		fmt.Printf("\n  Connect:   devbox ssh %s\n", b.ID)
+	} else {
+		fmt.Printf("\n  Provisioning — check status: devbox status %s\n", b.ID)
 	}
 }
 
