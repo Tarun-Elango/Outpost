@@ -28,8 +28,9 @@ Commands:
   snapshots delete <amiId>   Delete a snapshot
 
   templates                  List available templates
-  create --template <templateId> [<templateId>...] <name> Create a new box from one or more templates
-  create --template <templateId> [<templateId>...] <name> --from <snapshot_ami_id> Create from templates and restore from a snapshot
+  template new <name> [command string] Create a new template with a command to run on startup
+  create --template <template> [<template>...] <name> Create a new box from one or more templates
+  create --template <template> [<template>...] <name> --from <snapshot_ami_id> Create from templates and restore from a snapshot
   `)
 }
 
@@ -81,6 +82,8 @@ func main() {
 		cmd.Snapshots(args)
 	case "templates":
 		cmd.Templates(args)
+	case "template":
+		cmd.TemplateNew(args)
 	default:
 		fmt.Fprintf(os.Stderr, "devbox: unknown command %q\n\n", command)
 		usage()
