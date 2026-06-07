@@ -56,17 +56,19 @@ func SaveAWSCredentials(secret, accessKey, region string) error {
 }
 
 
-// a function, used by other, when mode is not set, we will manually set to local
-// nil output - regardles of if already set or not
-// error - if there is an error loading the config
-func ensureLocalMode() error {
-    cfg, err := config.Load()
-    if err != nil {
-        return err
-    }
-    if cfg.Mode != "" {
-        return nil 
-    }
-    cfg.Mode = "local"
-    return config.Save(cfg) // should be nil if successful
+// ensureLocalModeAndgetCurrMode returns the configured mode. If unset, it
+// persists "local" and returns "local".
+func ensureLocalModeAndgetCurrMode() (string, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return "", err
+	}
+	if cfg.Mode != "" {
+		return cfg.Mode, nil
+	}
+	cfg.Mode = "local"
+	if err := config.Save(cfg); err != nil {
+		return "", err
+	}
+	return "local", nil
 }
