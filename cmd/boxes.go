@@ -375,20 +375,38 @@ func Delete(args []string) {
 		return
 	}
 
-	client, err := api.NewDefault()
+	mode, err := service.EnsureLocalModeAndGetCurrMode()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 
-	resp, err := client.Delete("/v1/boxes/" + id)
-	if err != nil {
-		api.FailBox("delete", err)
+	if mode == "local" {
+		result, err := service.DeleteInstance(id, service.LocalUserID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		if !result.Success {
+			fmt.Fprintf(os.Stderr, "error: %s\n", result.Message)
+			os.Exit(1)
+		}
+	} else {
+		client, err := api.NewDefault()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+
+		resp, err := client.Delete("/v1/boxes/" + id)
+		if err != nil {
+			api.FailBox("delete", err)
+		}
+		if err := api.CheckStatus(resp); err != nil {
+			api.FailBox("delete", err)
+		}
+		resp.Body.Close()
 	}
-	if err := api.CheckStatus(resp); err != nil {
-		api.FailBox("delete", err)
-	}
-	resp.Body.Close()
 
 	fmt.Printf("Box %s deleted.\n", id)
 }

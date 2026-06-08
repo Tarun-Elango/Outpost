@@ -32,7 +32,7 @@ const (
 
 // LocalUserID is the fixed user id for local-mode CLI usage.
 const LocalUserID = localDb.LocalUserID
-	
+
 type Instance struct {
 	ID               string
 	Name             string
@@ -100,6 +100,7 @@ func ListInstances(userID string) ([]*Instance, error) {
 	}
 
 	// sync instances from aws to database
+	// TODO: only sync when there is difference between local and aws
 	instances := make([]*Instance, 0, len(found))
 	for _, inst := range found {
 		dto := instanceFromAWS(inst)
@@ -122,6 +123,7 @@ func ListInstances(userID string) ([]*Instance, error) {
 	return instances, nil
 }
 
+// convert to custom Instance struct, originall from aws struct
 func instanceFromAWS(inst types.Instance) *Instance {
 	name := ""
 	for _, tag := range inst.Tags {
@@ -405,10 +407,49 @@ func getInstanceFromAWS(instanceId string) (*Instance, error) {
 // 	return nil, fmt.Errorf("not implemented")
 // }
 
-// // used to delete an instance by id
-// func deleteInstanceById(instanceId string, userId string) (*Instance, error) {
-// 	return nil, fmt.Errorf("not implemented")
-// }
+// DeleteInstance terminates a box owned by userID and removes it from the local DB.
+// Mirrors Lighthouse DELETE /v1/boxes/{id}: ec2Service.terminateInstance(id, userId).
+func DeleteInstance(instanceID, userID string) (*ActionResult, error) {
+	db, err := localDb.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	_, err = db.GetInstanceByAwsInstanceIDAndUserID(instanceID, userID)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("box not found: %s", instanceID)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := context.Background()
+	client, err := awsclient.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ec2Client := ec2.NewFromConfig(client.Config())
+	_, err = ec2Client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
+		InstanceIds: []string{instanceID},
+	})
+	if err != nil {
+		return &ActionResult{
+			Success: false,
+			Message: fmt.Sprintf("Failed to terminate instance %s: %v", instanceID, err),
+		}, nil
+	}
+
+	if err := db.DeleteInstanceByAwsInstanceID(instanceID); err != nil {
+		return nil, err
+	}
+
+	return &ActionResult{
+		Success: true,
+		Message: fmt.Sprintf("Instance %s terminated successfully.", instanceID),
+	}, nil
+}
 
 // ActionResult mirrors lighthouse ActionResult for stop/start/delete responses.
 type ActionResult struct {
@@ -558,7 +599,40 @@ func checkSshStatusFromAWS(instanceID string) *SshStatus {
 	return &SshStatus{Ready: true, Instance: inst}
 }
 
-// // used to forward a port from an instance by id
-// func forwardPort(instanceId string, userId string, port int) (*Instance, error) {
-// 	return nil, fmt.Errorf("not implemented")
-// }
+// PortForwardResponse mirrors Lighthouse PortForwardResponse for POST /v1/boxes/{id}/ports.
+type PortForwardResponse struct {
+	Host       string `json:"host"`
+	User       string `json:"user"`
+	RemotePort string `json:"remotePort"`
+}
+
+// ForwardPort returns SSH connection details for port forwarding.
+// Mirrors Lighthouse POST /v1/boxes/{id}/ports: BoxesController.forwardPort.
+func ForwardPort(instanceID, port, userID string) (*PortForwardResponse, error) {
+	port = strings.TrimSpace(port)
+	if port == "" {
+		return nil, fmt.Errorf("missing required field: port")
+	}
+
+	box, err := GetInstance(instanceID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if box.Status != "running" {
+		return nil, fmt.Errorf("box is %s, not running", box.Status)
+	}
+
+	host := box.IPAddress
+	if host == "" {
+		host = box.PrivateIPAddress
+	}
+	if host == "" {
+		return nil, fmt.Errorf("no IP address available for instance: %s", instanceID)
+	}
+
+	return &PortForwardResponse{
+		Host:       host,
+		User:       "ec2-user",
+		RemotePort: port,
+	}, nil
+}
