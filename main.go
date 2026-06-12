@@ -11,7 +11,6 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `Usage: devbox <command> [args]
 
 Commands:
-  mode                Set the mode to cloud or local (default is local)
   setup               Configure/Change AWS credentials and region 
 
   create <name>       Create a new box
@@ -120,5 +119,5 @@ devbox schedule start i-0abc123 --cron "0 9 * * MON-FRI"  --tz America/New_York
 0 9  * * MON-FRI  → Mon–Fri 09:00
 
 
-
+  mode                Set the mode to cloud or local (default is local)
 */
