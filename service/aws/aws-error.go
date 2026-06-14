@@ -19,14 +19,14 @@ func WrapError(operation string, err error) error {
 	switch {
 	case IsAuthError(err):
 		return fmt.Errorf("%s: %w\nhint: invalid AWS credentials — run: devbox setup", operation, err)
-	case IsPermissionError(err):
-		return fmt.Errorf("%s: %w\nhint: credentials are valid but lack permission for this operation — check your IAM policy", operation, err)
 	case IsQuotaError(err):
 		return fmt.Errorf("%s: %w\nhint: AWS account limit reached — request a quota increase in the AWS console", operation, err)
 	case IsThrottlingError(err):
 		return fmt.Errorf("%s: %w\nhint: AWS rate limit hit — wait a moment and retry", operation, err)
 	case IsRegionError(err):
 		return fmt.Errorf("%s: %w\nhint: resource not available in this region — check your region in: devbox setup", operation, err)
+	case IsPermissionError(err):
+		return fmt.Errorf("%s: %w\nhint: credentials are valid but lack permission for this operation — check your IAM policy", operation, err)
 	default:
 		return fmt.Errorf("%s: %w", operation, err)
 	}
