@@ -274,13 +274,8 @@ func Stop(args []string) {
 	if mode == "local" {
 		rt := mustOpenRuntime()
 		defer func() { _ = rt.Close() }()
-		result, err := rt.StopInstance(id, service.LocalUserID)
-		if err != nil {
+		if err := rt.StopInstance(id, service.LocalUserID); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
-		if !result.Success {
-			fmt.Fprintf(os.Stderr, "error: %s\n", result.Message)
 			os.Exit(1)
 		}
 	} else {
@@ -326,13 +321,8 @@ func Start(args []string) {
 	if mode == "local" {
 		rt := mustOpenRuntime()
 		defer func() { _ = rt.Close() }()
-		result, err := rt.StartInstance(id, service.LocalUserID)
-		if err != nil {
+		if err := rt.StartInstance(id, service.LocalUserID); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
-		if !result.Success {
-			fmt.Fprintf(os.Stderr, "error: %s\n", result.Message)
 			os.Exit(1)
 		}
 	} else {
@@ -386,13 +376,8 @@ func Delete(args []string) {
 	if mode == "local" {
 		rt := mustOpenRuntime()
 		defer func() { _ = rt.Close() }()
-		result, err := rt.DeleteInstance(id, service.LocalUserID)
-		if err != nil {
+		if err := rt.DeleteInstance(id, service.LocalUserID); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
-		if !result.Success {
-			fmt.Fprintf(os.Stderr, "error: %s\n", result.Message)
 			os.Exit(1)
 		}
 	} else {

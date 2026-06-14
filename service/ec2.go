@@ -435,20 +435,20 @@ func (r *Runtime) getInstanceFromAWS(instanceId string) (*Instance, error) {
 
 // DeleteInstance terminates a box owned by userID and removes it from the local DB.
 // Mirrors Lighthouse DELETE /v1/boxes/{id}: ec2Service.terminateInstance(id, userId).
-func (r *Runtime) DeleteInstance(instanceID, userID string) (*ActionResult, error) {
+func (r *Runtime) DeleteInstance(instanceID, userID string) error {
 	db := r.DB()
 
 	_, err := db.GetInstanceByAwsInstanceIDAndUserID(instanceID, userID)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("box not found: %s", instanceID)
+		return fmt.Errorf("box not found: %s", instanceID)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	ec2Client, err := r.EC2()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	ctx := r.Context()
@@ -456,44 +456,28 @@ func (r *Runtime) DeleteInstance(instanceID, userID string) (*ActionResult, erro
 		InstanceIds: []string{instanceID},
 	})
 	if err != nil {
-		return &ActionResult{
-			Success: false,
-			Message: fmt.Sprintf("Failed to terminate instance %s: %v", instanceID, err),
-		}, nil
+		return awsclient.WrapError("terminate instance", err)
 	}
 
-	if err := db.DeleteInstanceByAwsInstanceID(instanceID); err != nil {
-		return nil, err
-	}
-
-	return &ActionResult{
-		Success: true,
-		Message: fmt.Sprintf("Instance %s terminated successfully.", instanceID),
-	}, nil
-}
-
-// ActionResult mirrors lighthouse ActionResult for stop/start/delete responses.
-type ActionResult struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
+	return db.DeleteInstanceByAwsInstanceID(instanceID)
 }
 
 // StopInstance stops a running box owned by userID.
 // Mirrors Lighthouse POST /v1/boxes/{id}/stop: ec2Service.stopInstance(id, userId).
-func (r *Runtime) StopInstance(instanceID, userID string) (*ActionResult, error) {
+func (r *Runtime) StopInstance(instanceID, userID string) error {
 	db := r.DB()
 
 	_, err := db.GetInstanceByAwsInstanceIDAndUserID(instanceID, userID)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("box not found: %s", instanceID)
+		return fmt.Errorf("box not found: %s", instanceID)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	ec2Client, err := r.EC2()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	ctx := r.Context()
@@ -501,34 +485,28 @@ func (r *Runtime) StopInstance(instanceID, userID string) (*ActionResult, error)
 		InstanceIds: []string{instanceID},
 	})
 	if err != nil {
-		return &ActionResult{
-			Success: false,
-			Message: fmt.Sprintf("Failed to stop instance %s: %v", instanceID, err),
-		}, nil
+		return awsclient.WrapError("stop instance", err)
 	}
 
-	return &ActionResult{
-		Success: true,
-		Message: fmt.Sprintf("Instance %s stopped successfully.", instanceID),
-	}, nil
+	return nil
 }
 
 // StartInstance starts a stopped box owned by userID.
 // Mirrors Lighthouse POST /v1/boxes/{id}/start: ec2Service.startInstance(id, userId).
-func (r *Runtime) StartInstance(instanceID, userID string) (*ActionResult, error) {
+func (r *Runtime) StartInstance(instanceID, userID string) error {
 	db := r.DB()
 
 	_, err := db.GetInstanceByAwsInstanceIDAndUserID(instanceID, userID)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("box not found: %s", instanceID)
+		return fmt.Errorf("box not found: %s", instanceID)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	ec2Client, err := r.EC2()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	ctx := r.Context()
@@ -536,16 +514,10 @@ func (r *Runtime) StartInstance(instanceID, userID string) (*ActionResult, error
 		InstanceIds: []string{instanceID},
 	})
 	if err != nil {
-		return &ActionResult{
-			Success: false,
-			Message: fmt.Sprintf("Failed to start instance %s: %v", instanceID, err),
-		}, nil
+		return awsclient.WrapError("start instance", err)
 	}
 
-	return &ActionResult{
-		Success: true,
-		Message: fmt.Sprintf("Instance %s started successfully.", instanceID),
-	}, nil
+	return nil
 }
 
 // SshStatus mirrors lighthouse SshStatusResponse for local mode.
