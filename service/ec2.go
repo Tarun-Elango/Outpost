@@ -262,6 +262,10 @@ func (r *Runtime) createInstanceWithStartupScripts(name, publicKey, snapshotAmiI
 		string(launched.State.Name),
 		string(launched.InstanceType),
 	); err != nil {
+		// if the instance cannot be added to the database, terminate it
+		_, _ = ec2Client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
+			InstanceIds: []string{awsInstanceID},
+		})
 		return nil, err
 	}
 
@@ -428,6 +432,27 @@ func (r *Runtime) getInstanceFromAWS(instanceId string) (*Instance, error) {
 	return nil, fmt.Errorf("instance not found in AWS: %s", instanceId)
 }
 
+// get the instance from aws and sync it to the local db
+func (r *Runtime) syncInstanceFromAWSByID(instanceID string) error {
+	inst, err := r.getInstanceFromAWS(instanceID)
+	if err != nil {
+		return err
+	}
+
+	ip := inst.IPAddress
+	if ip == "" {
+		ip = inst.PrivateIPAddress
+	}
+
+	return r.DB().SyncInstanceFromAWS(
+		inst.ID,
+		inst.Status,
+		ip,
+		inst.InstanceType,
+		inst.Name,
+	)
+}
+
 // // used to update an instance, like name, type
 // func updateInstance(instanceId string, userId string, name string, status string) (*Instance, error) {
 // 	return nil, fmt.Errorf("not implemented")
@@ -451,6 +476,8 @@ func (r *Runtime) DeleteInstance(instanceID, userID string) error {
 		return err
 	}
 
+	// Terminate in AWS first so we never drop the local record while the instance
+	// is still running (avoids orphan EC2). Local DB is removed only after terminate succeeds.
 	ctx := r.Context()
 	_, err = ec2Client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
 		InstanceIds: []string{instanceID},
@@ -459,7 +486,11 @@ func (r *Runtime) DeleteInstance(instanceID, userID string) error {
 		return awsclient.WrapError("terminate instance", err)
 	}
 
-	return db.DeleteInstanceByAwsInstanceID(instanceID)
+	if err := db.DeleteInstanceByAwsInstanceID(instanceID); err != nil {
+		return fmt.Errorf("instance terminated in AWS but failed to remove local record: %w", err)
+	}
+
+	return nil
 }
 
 // StopInstance stops a running box owned by userID.
@@ -488,7 +519,7 @@ func (r *Runtime) StopInstance(instanceID, userID string) error {
 		return awsclient.WrapError("stop instance", err)
 	}
 
-	return nil
+	return r.syncInstanceFromAWSByID(instanceID)
 }
 
 // StartInstance starts a stopped box owned by userID.
@@ -517,7 +548,7 @@ func (r *Runtime) StartInstance(instanceID, userID string) error {
 		return awsclient.WrapError("start instance", err)
 	}
 
-	return nil
+	return r.syncInstanceFromAWSByID(instanceID)
 }
 
 // SshStatus mirrors lighthouse SshStatusResponse for local mode.
