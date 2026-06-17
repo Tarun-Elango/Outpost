@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,8 +104,37 @@ func formatHostBlock(name, ipAddress string) string {
 	)
 }
 
+func validateSSHBoxName(name string) error {
+	if name == "" {
+		return fmt.Errorf("host name cannot be empty")
+	}
+	if strings.ContainsAny(name, " \t\n\r") {
+		return fmt.Errorf("host name %q contains invalid characters", name)
+	}
+	return nil
+}
+
+func validateSSHIPAddress(ipAddress string) error {
+	if ipAddress == "" {
+		return fmt.Errorf("ip address cannot be empty")
+	}
+	if strings.ContainsAny(ipAddress, " \t\n\r") {
+		return fmt.Errorf("ip address %q contains invalid characters", ipAddress)
+	}
+	if net.ParseIP(ipAddress) == nil {
+		return fmt.Errorf("ip address %q is not a valid IP address", ipAddress)
+	}
+	return nil
+}
+
 // add new host in .ssh/config ( name, ip address)
 func AddHost(name, ipAddress string) error {
+	if err := validateSSHBoxName(name); err != nil {
+		return err
+	}
+	if err := validateSSHIPAddress(ipAddress); err != nil {
+		return err
+	}
 	host := devboxHostName(name)
 	content, err := readSSHConfig()
 	if err != nil {
@@ -122,6 +152,12 @@ func AddHost(name, ipAddress string) error {
 
 // update ip address in .ssh/config (name, ip address), for the given host with name, update the ip address
 func UpdateHost(name, ipAddress string) error {
+	if err := validateSSHBoxName(name); err != nil {
+		return err
+	}
+	if err := validateSSHIPAddress(ipAddress); err != nil {
+		return err
+	}
 	host := devboxHostName(name)
 	content, err := readSSHConfig() // get content of ssh config file
 	if err != nil {

@@ -254,6 +254,7 @@ func Create(args []string) {
 		fmt.Printf("\n  Provisioning — check status: devbox status %s\n", b.ID)
 		fmt.Printf("  Check SSH readiness: devbox ssh %s (may fail until initialization finishes)\n", b.ID)
 		fmt.Printf("  When SSH is ready: ssh devbox-%s or VS Code Remote-SSH → devbox-%s\n", b.Name, b.Name)
+		fmt.Printf("  Note: ssh devbox-%s works once reachable, but wait until devbox ssh %s succeeds — you may miss template setup if you connect too early\n", b.Name, b.ID)
 	}
 }
 

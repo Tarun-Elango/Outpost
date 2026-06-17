@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -326,7 +327,7 @@ func (r *Runtime) createInstanceWithStartupScripts(name, publicKey, snapshotAmiI
 	dto := instanceFromAWS(launched) // convert the aws instance to a custom Instance struct
 	if ip, err := dto.SSHHost(); err == nil {
 		if err := AddHost(name, ip); err != nil {
-			return dto, fmt.Errorf("box created but failed to update SSH config: %w", err)
+			fmt.Fprintf(os.Stderr, "warning: box created but failed to update SSH config: %v\n", err)
 		}
 	}
 
