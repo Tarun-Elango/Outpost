@@ -162,7 +162,7 @@ func (db *DB) ListSnapshotsByUserIDWithBoxAwsID(userID string) ([]SnapshotWithBo
 	rows, err := db.conn.Query(`
 		SELECT s.id, s.ami_id, s.name, s.user_id, s.box_id, s.state, s.created_at, i.aws_instance_id
 		FROM snapshots s
-		LEFT JOIN instances i ON s.box_id = i.id
+		LEFT JOIN instances i ON s.box_id = i.id AND i.user_id = s.user_id
 		WHERE s.user_id = ?
 		ORDER BY s.created_at`,
 		userID,
