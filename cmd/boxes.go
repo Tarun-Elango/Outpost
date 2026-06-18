@@ -245,11 +245,16 @@ func Create(args []string) {
 	fmt.Printf("  ID:        %s\n", b.ID)
 	fmt.Printf("  Name:      %s\n", b.Name)
 	fmt.Printf("  Status:    %s\n", b.Status)
+	fmt.Printf("  SSH config: devbox-%s added to ~/.ssh/config\n", b.Name)
 	if b.PublicIP != "" {
 		fmt.Printf("  Public IP: %s\n", b.PublicIP)
 		fmt.Printf("\n  Connect:   devbox ssh %s\n", b.ID)
+		fmt.Printf("             ssh devbox-%s  (or VS Code Remote-SSH → devbox-%s)\n", b.Name, b.Name)
 	} else {
 		fmt.Printf("\n  Provisioning — check status: devbox status %s\n", b.ID)
+		fmt.Printf("  Check SSH readiness: devbox ssh %s (may fail until initialization finishes)\n", b.ID)
+		fmt.Printf("  When SSH is ready: ssh devbox-%s or VS Code Remote-SSH → devbox-%s\n", b.Name, b.Name)
+		fmt.Printf("  Note: ssh devbox-%s works once reachable, but wait until devbox ssh %s succeeds — you may miss template setup if you connect too early\n", b.Name, b.ID)
 	}
 }
 

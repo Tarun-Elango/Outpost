@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -112,6 +113,9 @@ func (r *Runtime) ListInstances(userID string) ([]*Instance, error) {
 	// delete instances from database that are not in aws
 	for _, record := range records {
 		if _, ok := found[record.AwsInstanceID]; !ok {
+			if err := DeleteHost(record.Name); err != nil { // delete the host from the ssh config
+				return nil, fmt.Errorf("remove SSH config for %q: %w", record.Name, err)
+			}
 			if err := db.DeleteInstanceByAwsInstanceID(record.AwsInstanceID); err != nil {
 				return nil, err
 			}
@@ -147,6 +151,13 @@ func (r *Runtime) ListInstances(userID string) ([]*Instance, error) {
 				dto.Name,
 			); err != nil {
 				return nil, err
+			}
+
+			// if we are syncing the the aws instance to db, then update the ssh config in case the ip address has changed
+			if ip != "" {
+				if err := syncSSHHostIP(record.Name, ip); err != nil {
+					return nil, fmt.Errorf("update SSH config for %q: %w", record.Name, err)
+				}
 			}
 		}
 		instances = append(instances, dto)
@@ -312,7 +323,15 @@ func (r *Runtime) createInstanceWithStartupScripts(name, publicKey, snapshotAmiI
 		return nil, err
 	}
 
-	return instanceFromAWS(launched), nil
+	// upon successful creation, add the host to the ssh config
+	dto := instanceFromAWS(launched) // convert the aws instance to a custom Instance struct
+	if ip, err := dto.SSHHost(); err == nil {
+		if err := AddHost(name, ip); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: box created but failed to update SSH config: %v\n", err)
+		}
+	}
+
+	return dto, nil
 }
 
 // ensureIsolatedSecurityGroup creates or reuses a security group named
@@ -471,11 +490,11 @@ func (r *Runtime) getInstanceFromAWS(instanceId string) (*Instance, error) {
 	return nil, fmt.Errorf("instance not found in AWS: %s", instanceId)
 }
 
-// get the instance from aws and sync it to the local db
-func (r *Runtime) syncInstanceFromAWSByID(instanceID string) error {
+// fetches the instance from AWS, updates the local DB, and returns the instance.
+func (r *Runtime) syncInstanceFromAWSByID(instanceID string) (*Instance, error) {
 	inst, err := r.getInstanceFromAWS(instanceID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ip := inst.IPAddress
@@ -483,13 +502,16 @@ func (r *Runtime) syncInstanceFromAWSByID(instanceID string) error {
 		ip = inst.PrivateIPAddress
 	}
 
-	return r.DB().SyncInstanceFromAWS(
+	if err := r.DB().SyncInstanceFromAWS(
 		inst.ID,
 		inst.Status,
 		ip,
 		inst.InstanceType,
 		inst.Name,
-	)
+	); err != nil {
+		return nil, err
+	}
+	return inst, nil
 }
 
 // // used to update an instance, like name, type
@@ -502,7 +524,8 @@ func (r *Runtime) syncInstanceFromAWSByID(instanceID string) error {
 func (r *Runtime) DeleteInstance(instanceID, userID string) error {
 	db := r.DB()
 
-	if _, err := requireOwnedInstance(db, instanceID, userID); err != nil {
+	record, err := requireOwnedInstance(db, instanceID, userID)
+	if err != nil {
 		return err
 	}
 
@@ -519,6 +542,10 @@ func (r *Runtime) DeleteInstance(instanceID, userID string) error {
 	})
 	if err != nil {
 		return awsclient.WrapError("terminate instance", err)
+	}
+
+	if err := DeleteHost(record.Name); err != nil {
+		return fmt.Errorf("instance terminated but failed to remove SSH config entry: %w", err)
 	}
 
 	if err := db.DeleteInstanceByAwsInstanceID(instanceID); err != nil {
@@ -550,7 +577,10 @@ func (r *Runtime) StopInstance(instanceID, userID string) error {
 		return awsclient.WrapError("stop instance", err)
 	}
 
-	return r.syncInstanceFromAWSByID(instanceID)
+	if _, err := r.syncInstanceFromAWSByID(instanceID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // StartInstance starts a stopped box owned by userID.
@@ -558,7 +588,8 @@ func (r *Runtime) StopInstance(instanceID, userID string) error {
 func (r *Runtime) StartInstance(instanceID, userID string) error {
 	db := r.DB()
 
-	if _, err := requireOwnedInstance(db, instanceID, userID); err != nil {
+	record, err := requireOwnedInstance(db, instanceID, userID)
+	if err != nil {
 		return err
 	}
 
@@ -575,7 +606,17 @@ func (r *Runtime) StartInstance(instanceID, userID string) error {
 		return awsclient.WrapError("start instance", err)
 	}
 
-	return r.syncInstanceFromAWSByID(instanceID)
+	inst, err := r.syncInstanceFromAWSByID(instanceID)
+	if err != nil {
+		return err
+	}
+	if ip, err := inst.SSHHost(); err == nil {
+		if err := syncSSHHostIP(record.Name, ip); err != nil {
+			return fmt.Errorf("box started but failed to update SSH config: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // SshStatus mirrors lighthouse SshStatusResponse for local mode.
