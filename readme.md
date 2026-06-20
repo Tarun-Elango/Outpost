@@ -103,7 +103,7 @@ devbox ls
 
 ## Common commands:
 
-usage method: devbox <command>
+usage method: devbox command
 
 | Command                                    | Notes (what it does)                                    |
 | ------------------------------------------ | ------------------------------------------------------- |
