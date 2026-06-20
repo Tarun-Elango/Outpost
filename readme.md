@@ -103,6 +103,8 @@ devbox ls
 
 ## Common commands:
 
+usage method: devbox <command>
+
 | Command                                    | Notes (what it does)                                    |
 | ------------------------------------------ | ------------------------------------------------------- |
 | `setup`                                    | Configure/change AWS credentials and region (stored in `~/.devbox/config.json`) |
