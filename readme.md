@@ -60,3 +60,9 @@ The CLI is a one-shot command — it performs an action and exits.
 ./devbox -test create mybox   # prints: [test] create: done
 ./devbox -test ssh abc123     # prints: [test] ssh: done
 ```
+
+## Local config (`~/.devbox`)
+
+Credentials and tokens are stored in `~/.devbox/config.json` (mode 0600).
+**Do not sync this folder** — not via dotfiles, iCloud, Dropbox, or Git.
+Use a dedicated low-privilege IAM user for AWS keys.
