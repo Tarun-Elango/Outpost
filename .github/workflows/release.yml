@@ -1,4 +1,4 @@
-name: Build and Single-Latest Release
+name: Build and Publish Latest Release
 
 on:
   push:
@@ -24,16 +24,28 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Build binary (latest build)
-        run: go build -o devbox -ldflags "-X main.ServerURL=${{ secrets.SERVER_URL }}" .
+      - name: Build release binaries
+        run: |
+          mkdir -p dist
+          for os in linux darwin; do
+            for arch in amd64 arm64; do
+              GOOS="$os" GOARCH="$arch" go build \
+                -o "dist/devbox-$os-$arch" \
+                -ldflags "-X main.ServerURL=${{ secrets.SERVER_URL }}" .
+            done
+          done
 
       - name: Create new release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest devbox \
+          gh release create latest \
+            dist/devbox-linux-amd64 \
+            dist/devbox-linux-arm64 \
+            dist/devbox-darwin-amd64 \
+            dist/devbox-darwin-arm64 \
             --target "${{ github.sha }}" \
             --title "Latest build" \
-            --notes "Auto-generated build from main" \
+            --notes "Auto-generated Linux and macOS builds for amd64 and arm64 from main" \
             --latest

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -98,10 +99,10 @@ type Config struct {
 	RefreshToken string    `json:"refresh_token"`
 	TokenExpiry  time.Time `json:"token_expiry"`
 	ServerURL    string    `json:"serverUrl"`
-	AwsSecret    string `json:"awsSecret"`
-	AwsAccessKey string `json:"awsAccessKey"`
-	AwsRegion    string `json:"awsRegion"`
-	Mode         string `json:"mode"`
+	AwsSecret    string    `json:"awsSecret"`
+	AwsAccessKey string    `json:"awsAccessKey"`
+	AwsRegion    string    `json:"awsRegion"`
+	Mode         string    `json:"mode"`
 }
 
 // IsTokenExpired reports whether the access token is expired or will expire
@@ -154,14 +155,20 @@ func Save(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	configDir := filepath.Dir(path)
+	_, statErr := os.Stat(configDir) // check if the directory exists
+	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
+	}
+	if os.IsNotExist(statErr) && runtime.GOOS == "darwin" {
+		nosync := filepath.Join(configDir, ".nosync") //if mac, and stat error, add the .nosync file to the directory
+		_ = os.WriteFile(nosync, nil, 0600)
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil { // only the owner can read/write
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil

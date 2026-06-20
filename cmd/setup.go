@@ -50,8 +50,6 @@ func Setup(args []string) {
 		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Printf("AWS credentials saved (region: %s).\n", region)
 }
 
 // function to select region

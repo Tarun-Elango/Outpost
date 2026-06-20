@@ -1,6 +1,10 @@
 package service
 
-import "devbox-cli/internal/config"
+import (
+	"fmt"
+
+	"devbox-cli/internal/config"
+)
 
 // Region is an AWS region id with a human-readable label.
 type Region struct {
@@ -53,7 +57,12 @@ func SaveAWSCredentials(secret, accessKey, region string) error {
 	cfg.AwsAccessKey = accessKey
 	cfg.AwsRegion = region
 	cfg.Mode = "local"
-	return config.Save(cfg)
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	fmt.Println("Credentials saved to ~/.devbox/config.json.")
+	fmt.Println("Keep this folder local only — do not sync or commit it.")
+	return nil
 }
 
 

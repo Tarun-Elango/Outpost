@@ -6,32 +6,67 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"devbox-cli/internal/api"
 	"devbox-cli/service"
 )
 
 const (
-	devboxReadyPath    = "/var/lib/devbox/ready"
-	devboxReadyMessage = "the user data script is completed"
+	devboxReadyPath         = "/var/lib/devbox/ready"
+	devboxReadyMessage      = "the user data script is completed"
+	devboxReadyPollInterval = 5 * time.Second
 )
 
 var execCommand = exec.Command
 
-// defaultKeyPath returns the path to the user's default SSH private key,
-// trying id_ed25519 then id_rsa under ~/.ssh. Returns "" if none found.
-func defaultKeyPath() string {
+// helper: ed25519KeyPaths returns paths to ~/.ssh/id_ed25519 and ~/.ssh/id_ed25519.pub.
+func ed25519KeyPaths() (privateKey, publicKey string, err error) {
 	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+	sshDir := filepath.Join(home, ".ssh")
+	return filepath.Join(sshDir, "id_ed25519"), filepath.Join(sshDir, "id_ed25519.pub"), nil
+}
+
+// helper: ensureEd25519Key runs ssh-keygen to create ~/.ssh/id_ed25519 when the user confirms.
+func ensureEd25519Key() error {
+	priv, _, err := ed25519KeyPaths()
+	if err != nil {
+		return err
+	}
+
+	sshKeygen, err := exec.LookPath("ssh-keygen") // look for ssh-keygen binary in PATH
+	if err != nil {
+		return fmt.Errorf("ssh-keygen not found in PATH")
+	}
+
+	if err := os.MkdirAll(filepath.Dir(priv), 0o700); err != nil { // create the ~/.ssh directory if it doesn't exist
+		return fmt.Errorf("create ~/.ssh: %w", err)
+	}
+
+	cmd := exec.Command(sshKeygen, "-t", "ed25519", "-f", priv) // create the ed25519 key pair
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ssh-keygen failed: %w", err)
+	}
+	return nil
+}
+
+// defaultKeyPath returns ~/.ssh/id_ed25519 if it exists, otherwise "".
+func defaultKeyPath() string {
+	priv, _, err := ed25519KeyPaths()
 	if err != nil {
 		return ""
 	}
-	for _, name := range []string{"id_ed25519", "id_rsa"} {
-		p := filepath.Join(home, ".ssh", name)
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
+	if _, err := os.Stat(priv); err == nil {
+		return priv
 	}
 	return ""
 }
@@ -54,18 +89,24 @@ func sshBaseArgs(identity, portArg string) []string {
 	return argv
 }
 
-// ssh ec2-user@ip 'test "$(cat /var/lib/devbox/ready 2>/dev/null)" = "the user data script is completed"'; echo "exit code: $?"
 // checkDevboxReady runs one SSH probe for the user-data ready marker.
+// Returns (true, nil) when ready, (false, nil) when SSH works but provisioning
+// is incomplete, and (false, err) when SSH is not reachable yet.
 func checkDevboxReady(sshBin, identity, user, host, portArg string) (bool, error) {
 	target := fmt.Sprintf("%s@%s", user, host)
 	probe := fmt.Sprintf(`test "$(cat %s 2>/dev/null)" = %q`, devboxReadyPath, devboxReadyMessage)
-	argv := append([]string{sshBin}, sshBaseArgs(identity, portArg)...)
-	argv = append(argv,
+	argv := []string{sshBin,
+		"-p", portArg,
+		"-o", "ConnectTimeout=5",
+		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "BatchMode=yes",
 		"-o", "LogLevel=ERROR",
-		target,
-		probe,
-	)
+	}
+	if identity != "" {
+		argv = append([]string{sshBin, "-i", identity}, argv[1:]...)
+	}
+	argv = append(argv, target, probe)
+
 	err := execCommand(argv[0], argv[1:]...).Run()
 	if err == nil {
 		return true, nil
@@ -77,6 +118,35 @@ func checkDevboxReady(sshBin, identity, user, host, portArg string) (bool, error
 	}
 
 	return false, err
+}
+
+// waitForDevboxReady polls until the user-data ready marker is present or the user cancels.
+func waitForDevboxReady(sshBin, identity, user, host, portArg string) error {
+	sigCh := make(chan os.Signal, 1)   // channel to receive signals
+	signal.Notify(sigCh, os.Interrupt) // notify when interrupt signal is received
+	defer signal.Stop(sigCh)           // stop listening for signals
+
+	for {
+		ready, err := checkDevboxReady(sshBin, identity, user, host, portArg)
+		if ready {
+			return nil
+		}
+
+		var msg string
+		if err != nil {
+			msg = "waiting for SSH to become reachable, might take a moment. Press Ctrl+C to stop waiting."
+		} else {
+			msg = "waiting for templates to be installed, might take a moment. Press Ctrl+C to stop waiting."
+		}
+		fmt.Fprintf(os.Stderr, "ssh: %s\n", msg)
+
+		select {
+		case <-time.After(devboxReadyPollInterval):
+		case <-sigCh: // if interrupt signal is received, cancel the operation
+			fmt.Fprintln(os.Stderr)
+			return fmt.Errorf("cancelled")
+		}
+	}
 }
 
 // SSH checks EC2 health and the devbox ready marker, then execs ssh.
@@ -188,11 +258,8 @@ func SSH(args []string) {
 	target := fmt.Sprintf("%s@%s", *user, b.PublicIP)
 	portArg := fmt.Sprintf("%d", *port)
 
-	ready, err := checkDevboxReady(sshBin, *identity, *user, b.PublicIP, portArg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ssh: readiness probe failed (%v); attempting SSH anyway\n", err)
-	} else if !ready {
-		fmt.Fprintln(os.Stderr, "ssh: devbox is not ready yet — try again in a minute")
+	if err := waitForDevboxReady(sshBin, *identity, *user, b.PublicIP, portArg); err != nil {
+		fmt.Fprintf(os.Stderr, "ssh: %v\n", err)
 		os.Exit(1)
 	}
 
