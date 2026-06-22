@@ -1,12 +1,17 @@
 package backup
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 const (
@@ -36,8 +41,9 @@ func MaybeDaily() {
 	runAsync(dir)
 }
 
-// BeforeConfigSave creates a backup before persisting config changes in local mode.
-// Best-effort: errors are ignored; backup runs in the background.
+// BeforeConfigSave copies the current config and db before persisting changes in local mode.
+// Blocks until the backup finishes so the snapshot is the previous version, not a race.
+// Best-effort: errors are ignored.
 func BeforeConfigSave(mode string) {
 	if mode != "" && mode != "local" {
 		return
@@ -46,15 +52,17 @@ func BeforeConfigSave(mode string) {
 	if err != nil {
 		return
 	}
-	runAsync(dir)
+	runLocked(dir)
 }
 
 func runAsync(dir string) {
-	go func() {
-		backupMu.Lock()
-		defer backupMu.Unlock()
-		_ = create(dir)
-	}()
+	go runLocked(dir)
+}
+
+func runLocked(dir string) {
+	backupMu.Lock()
+	defer backupMu.Unlock()
+	_ = create(dir)
 }
 
 func isLocalMode() bool {
@@ -143,7 +151,7 @@ func create(backupRoot string) error {
 		}
 	}
 	if dbExists {
-		if err := copyFile(dbPath, filepath.Join(dest, dbFile)); err != nil {
+		if err := vacuumDB(dbPath, filepath.Join(dest, dbFile)); err != nil {
 			return err
 		}
 	}
@@ -178,6 +186,27 @@ func removeOldBackupsExcept(dir, keep string) error {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func vacuumDB(srcPath, dstPath string) error {
+	// open the source database
+	conn, err := sql.Open("sqlite", srcPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	conn.SetMaxOpenConns(1)
+
+	// get the absolute path to the destination database
+	absDst, err := filepath.Abs(dstPath)
+	if err != nil {
+		return err
+	}
+	// escape the destination path for the SQL command
+	escaped := strings.ReplaceAll(absDst, "'", "''")
+	// execute the VACUUM command
+	_, err = conn.Exec(fmt.Sprintf("VACUUM INTO '%s'", escaped))
+	return err
 }
 
 func copyFile(src, dst string) error {
