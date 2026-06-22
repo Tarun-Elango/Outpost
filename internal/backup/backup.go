@@ -78,6 +78,7 @@ func isLocalMode() bool {
 	return cfg.Mode == "" || cfg.Mode == "local"
 }
 
+// get the path to the backup directory
 func backupDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -102,6 +103,7 @@ func latestBackupTime(dir string) (time.Time, bool) {
 	}
 	var latest time.Time
 	var found bool
+	// for each entry in the backup directory,
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -130,10 +132,6 @@ func create(backupRoot string) error {
 		return nil
 	}
 
-	if err := removeOldBackups(backupRoot); err != nil {
-		return err
-	}
-
 	dest := filepath.Join(backupRoot, time.Now().Format(timestampLayout))
 	if err := os.MkdirAll(dest, 0700); err != nil {
 		return err
@@ -149,21 +147,30 @@ func create(backupRoot string) error {
 			return err
 		}
 	}
+	// only remove the backups if copying was successful
+	if err := removeOldBackupsExcept(backupRoot, filepath.Base(dest)); err != nil {
+		return err
+	}
 	return nil
 }
 
-func removeOldBackups(dir string) error {
+func removeOldBackupsExcept(dir, keep string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+
 		if os.IsNotExist(err) {
-			return os.MkdirAll(dir, 0700)
+			return nil
 		}
 		return err
 	}
+
+	// loop all the entries
 	for _, e := range entries {
-		if e.IsDir() {
-			_ = os.RemoveAll(filepath.Join(dir, e.Name()))
+		// only remove non-directory entries and the keep entry
+		if !e.IsDir() || e.Name() == keep {
+			continue
 		}
+		_ = os.RemoveAll(filepath.Join(dir, e.Name()))
 	}
 	return nil
 }
