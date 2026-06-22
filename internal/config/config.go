@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"devbox-cli/internal/backup"
 )
 
 const (
@@ -151,6 +153,7 @@ func Load() (*Config, error) {
 
 // Save writes cfg to ~/.devbox/config.json, creating the directory if needed.
 func Save(cfg *Config) error {
+	backup.BeforeConfigSave(cfg.Mode)
 	path, err := configPath()
 	if err != nil {
 		return err
