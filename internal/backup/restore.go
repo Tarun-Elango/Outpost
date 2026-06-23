@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // RestoreConfigIfNeeded copies config.json from the latest backup when the live
@@ -34,7 +35,7 @@ func RestoreDBIfNeeded() {
 }
 
 func configPath() (string, error) {
-	_, configPath, err := devboxPaths()
+	configPath, _, err := devboxPaths()
 	return configPath, err
 }
 
@@ -62,35 +63,77 @@ func isDBValid(path string) bool {
 	}
 	defer func() { _ = conn.Close() }()
 	conn.SetMaxOpenConns(1)
-	return conn.Ping() == nil
+	var result string
+
+	// we do a PRAGMA quick_check to check if the database is valid
+	if err := conn.QueryRow("PRAGMA quick_check").Scan(&result); err != nil {
+		return false
+	}
+	return result == "ok"
 }
 
-func latestBackupDir() (string, bool) {
+// this checks the edge case where we have two backups one incomplete and 1 complete
+// and we make sure to check the file which has the file that we want (name)
+func latestBackupDirWithFile(name string) (string, bool) {
 	dir, err := backupDir()
 	if err != nil {
 		return "", false
 	}
-	latest, ok := latestBackupTime(dir)
-	if !ok {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
 		return "", false
 	}
-	return filepath.Join(dir, latest.Format(timestampLayout)), true
+	var newest time.Time
+	var result string
+	var found bool
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		// t -> is the timestamp of the backup directory
+		t, err := parseBackupDirTime(e.Name())
+		if err != nil {
+			continue
+		}
+		if !fileExists(filepath.Join(dir, e.Name(), name)) {
+			continue
+		}
+		if !found || t.After(newest) {
+			newest = t
+			result = filepath.Join(dir, e.Name())
+			found = true
+		}
+	}
+	return result, found
 }
 
+// restore file ( based on name - either config.json or devbox.db)
 func restoreFile(destPath, name string) {
-	backupRoot, ok := latestBackupDir() // get the latest backup directory
+	backupRoot, ok := latestBackupDirWithFile(name)
 	if !ok {
 		return
 	}
-	src := filepath.Join(backupRoot, name) // get the source file path
-	if !fileExists(src) {
+	src := filepath.Join(backupRoot, name)
+	destDir := filepath.Dir(destPath)
+	if err := os.MkdirAll(destDir, 0700); err != nil { // create the destination directory
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(destPath), 0700); err != nil { // create the destination directory
+
+	tempFile, err := os.CreateTemp(destDir, filepath.Base(destPath)+".tmp-*")
+	if err != nil {
 		return
 	}
-	if err := copyFile(src, destPath); err != nil { // copy the file
+	tempPath := tempFile.Name()
+	_ = tempFile.Close()
+	defer func() { _ = os.Remove(tempPath) }()
+
+	if err := copyFile(src, tempPath); err != nil { // copy the file
 		return
 	}
-	_ = os.Chmod(destPath, 0600) // set the file permissions
+	if err := os.Chmod(tempPath, 0600); err != nil { // set the file permissions before replacing the destination
+		return
+	}
+	if err := os.Rename(tempPath, destPath); err != nil { // atomically replace the destination file
+		return
+	}
 }

@@ -172,9 +172,23 @@ func Save(cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	tmpPath := filepath.Join(configDir, configFile+".tmp")
-	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
+	tmpFile, err := os.CreateTemp(configDir, configFile+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp config: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("write config: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close temp config: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0600); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("chmod temp config: %w", err)
 	}
 	// rename ( remove the .tmp ), if it fails, remove the tmp file
 	if err := os.Rename(tmpPath, path); err != nil {

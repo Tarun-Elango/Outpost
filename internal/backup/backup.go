@@ -15,18 +15,19 @@ import (
 )
 
 const (
-	devboxDir       = ".devbox"
-	backupDirName   = ".devbox-backup"
-	configFile      = "config.json"
-	dbFile          = "devbox.db"
-	backupInterval  = 24 * time.Hour
-	timestampLayout = "20060102-150405"
+	devboxDir         = ".devbox"
+	backupDirName     = ".devbox-backup"
+	configFile        = "config.json"
+	dbFile            = "devbox.db"
+	backupInterval    = 24 * time.Hour
+	timestampLayout   = "20060102-150405"
+	timestampLayoutNS = "20060102-150405.000000000"
 )
 
 var backupMu sync.Mutex
 
 // MaybeDaily creates a backup if at least 24 hours have passed since the last one.
-// Best-effort: errors are ignored; backup runs in the background.
+// Best-effort: errors are ignored; backup blocks so short-lived CLI commands do not exit mid-backup.
 func MaybeDaily() {
 	if !isLocalMode() {
 		return
@@ -38,7 +39,7 @@ func MaybeDaily() {
 	if last, ok := latestBackupTime(dir); ok && time.Since(last) < backupInterval {
 		return
 	}
-	runAsync(dir)
+	runLocked(dir)
 }
 
 // BeforeConfigSave copies the current config and db before persisting changes in local mode.
@@ -53,10 +54,6 @@ func BeforeConfigSave(mode string) {
 		return
 	}
 	runLocked(dir)
-}
-
-func runAsync(dir string) {
-	go runLocked(dir)
 }
 
 func runLocked(dir string) {
@@ -96,7 +93,7 @@ func backupDir() (string, error) {
 }
 
 func devboxPaths() (configPath, dbPath string, err error) {
-	home, err := os.UserHomeDir() 
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", "", err
 	}
@@ -116,7 +113,7 @@ func latestBackupTime(dir string) (time.Time, bool) {
 		if !e.IsDir() {
 			continue
 		}
-		t, err := time.Parse(timestampLayout, e.Name())
+		t, err := parseBackupDirTime(e.Name())
 		if err != nil {
 			continue
 		}
@@ -126,6 +123,14 @@ func latestBackupTime(dir string) (time.Time, bool) {
 		}
 	}
 	return latest, found
+}
+
+// name to actual timestamp time.Time
+func parseBackupDirTime(name string) (time.Time, error) {
+	if t, err := time.Parse(timestampLayoutNS, name); err == nil {
+		return t, nil
+	}
+	return time.Parse(timestampLayout, name)
 }
 
 func create(backupRoot string) error {
@@ -140,7 +145,7 @@ func create(backupRoot string) error {
 		return nil
 	}
 
-	dest := filepath.Join(backupRoot, time.Now().Format(timestampLayout))
+	dest := filepath.Join(backupRoot, time.Now().UTC().Format(timestampLayoutNS))
 	if err := os.MkdirAll(dest, 0700); err != nil {
 		return err
 	}
