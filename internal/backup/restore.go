@@ -78,19 +78,19 @@ func latestBackupDir() (string, bool) {
 }
 
 func restoreFile(destPath, name string) {
-	backupRoot, ok := latestBackupDir()
+	backupRoot, ok := latestBackupDir() // get the latest backup directory
 	if !ok {
 		return
 	}
-	src := filepath.Join(backupRoot, name)
+	src := filepath.Join(backupRoot, name) // get the source file path
 	if !fileExists(src) {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(destPath), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destPath), 0700); err != nil { // create the destination directory
 		return
 	}
-	if err := copyFile(src, destPath); err != nil {
+	if err := copyFile(src, destPath); err != nil { // copy the file
 		return
 	}
-	_ = os.Chmod(destPath, 0600)
+	_ = os.Chmod(destPath, 0600) // set the file permissions
 }

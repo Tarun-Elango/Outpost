@@ -96,7 +96,7 @@ func backupDir() (string, error) {
 }
 
 func devboxPaths() (configPath, dbPath string, err error) {
-	home, err := os.UserHomeDir()
+	home, err := os.UserHomeDir() 
 	if err != nil {
 		return "", "", err
 	}
