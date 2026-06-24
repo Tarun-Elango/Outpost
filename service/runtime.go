@@ -12,8 +12,9 @@ import (
 
 // Runtime holds shared DB and AWS clients for a single CLI invocation.
 type Runtime struct {
-	ctx context.Context
-	db  *localDb.DB
+	ctx    context.Context
+	cancel context.CancelFunc
+	db     *localDb.DB
 
 	ec2Once sync.Once // lazy loading of the ec2 client
 	ec2     *ec2.Client
@@ -22,19 +23,29 @@ type Runtime struct {
 
 // Open connects to the local database. AWS clients are created lazily on first use.
 // called by cmd/runtime.go
-func Open(ctx context.Context) (*Runtime, error) {
+func Open(ctx context.Context, cancel context.CancelFunc) (*Runtime, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	db, err := localDb.Open()
 	if err != nil {
+		if cancel != nil {
+			cancel() // cancel the context if the database fails to open, we return anyways
+		}
 		return nil, err
 	}
-	return &Runtime{ctx: ctx, db: db}, nil
+
+	// if all good, return the runtime, and nil error
+	return &Runtime{ctx: ctx, cancel: cancel, db: db}, nil
 }
 
 // Close releases the database connection.
 func (r *Runtime) Close() error {
+	if r.cancel != nil {
+		// if cancel is not nil, cancel the context
+		r.cancel()
+		r.cancel = nil
+	}
 	if r.db == nil {
 		return nil
 	}
