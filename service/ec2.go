@@ -113,12 +113,12 @@ func (r *Runtime) ListInstances(userID string) ([]*Instance, error) {
 	// delete instances from database that are not in aws
 	for _, record := range records {
 		if _, ok := found[record.AwsInstanceID]; !ok {
-			if err := DeleteHost(record.Name); err != nil { // delete the host from the ssh config
-				return nil, fmt.Errorf("remove SSH config for %q: %w", record.Name, err)
-			}
+			// delete the instance from the database
 			if err := db.DeleteInstanceByAwsInstanceID(record.AwsInstanceID); err != nil {
 				return nil, err
 			}
+			// delete the host from the ssh config
+			_ = DeleteHost(record.Name)
 		}
 	}
 
