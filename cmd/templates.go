@@ -170,6 +170,7 @@ func CreateTemplate(args []string) {
 	}
 
 	instanceType := service.DefaultInstanceType
+	volumeSizeGB := service.DefaultVolumeSizeGB
 	if mode == "local" {
 		selected, err := selectInstanceType(service.AllInstanceTypes())
 		if err != nil {
@@ -181,6 +182,17 @@ func CreateTemplate(args []string) {
 			os.Exit(1)
 		}
 		instanceType = selected
+
+		selectedVolume, err := selectVolumeSizeGB()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error selecting volume size: %v\n", err)
+			os.Exit(1)
+		}
+		if err := service.ValidateVolumeSizeGB(selectedVolume); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		volumeSizeGB = selectedVolume
 	}
 
 	if fromSnapshot != "" {
@@ -193,7 +205,7 @@ func CreateTemplate(args []string) {
 	if mode == "local" {
 		rt := mustOpenRuntime()
 		defer func() { _ = rt.Close() }()
-		inst, err := rt.CreateBoxFromTemplates(name, templateRefs, pubKey, fromSnapshot, service.LocalUserID, instanceType)
+		inst, err := rt.CreateBoxFromTemplates(name, templateRefs, pubKey, fromSnapshot, service.LocalUserID, instanceType, volumeSizeGB)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -232,6 +244,9 @@ func CreateTemplate(args []string) {
 	fmt.Printf("  Status:    %s\n", b.Status)
 	if b.InstanceType != "" {
 		fmt.Printf("  Type:      %s\n", b.InstanceType)
+	}
+	if mode == "local" && fromSnapshot == "" {
+		fmt.Printf("  Storage:   %d GB\n", volumeSizeGB)
 	}
 	if b.PublicIP != "" {
 		fmt.Printf("  Public IP: %s\n", b.PublicIP)
