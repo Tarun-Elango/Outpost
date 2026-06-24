@@ -13,17 +13,18 @@ const defaultCommandTimeout = 5 * time.Minute
 
 // CommandContext returns a context bounded to the lifetime of a CLI command.
 // timer for the whole command
-func CommandContext() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), defaultCommandTimeout)
-	return ctx
+func CommandContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), defaultCommandTimeout)
 }
 
 // shared helper for cmds to open the runtime, and call the service functions using rt.function()
 
 // mustOpenRuntime opens the runtime and panics if it fails
 func mustOpenRuntime() *service.Runtime {
-	rt, err := service.Open(CommandContext())
+	ctx, cancel := CommandContext()
+	rt, err := service.Open(ctx, cancel)
 	if err != nil {
+		cancel() // cancel the context if the runtime fails to open
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

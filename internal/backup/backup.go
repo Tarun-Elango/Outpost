@@ -239,15 +239,16 @@ func hotCopyDB(srcPath, dstPath string) error {
 	}
 	defer func() { _ = conn.Close() }()
 
+	var busy int
 	checkpointErr := sqliteutil.WithRetry(func() error {
-		// checkpoint the database
-		_, err := conn.Exec("PRAGMA wal_checkpoint(TRUNCATE)") // truncate the WAL file
-		return err
+		var logFrames, checkpointed int
+		return conn.QueryRow("PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed)
 	})
-	if checkpointErr != nil && !sqliteutil.IsBusy(checkpointErr) { // if the checkpoint failed and is not a busy error, return the error
+	if checkpointErr != nil && !sqliteutil.IsBusy(checkpointErr) {
 		return checkpointErr
 	}
-	if checkpointErr == nil { // if the checkpoint succeeded, copy the database file
+	if checkpointErr == nil && busy == 0 {
+		// if the checkpoint succeeded and the busy flag is 0, copy the database file
 		return copyFile(srcPath, dstPath)
 	}
 	return copyDBFiles(srcPath, dstPath) // if the checkpoint failed, copy the database file

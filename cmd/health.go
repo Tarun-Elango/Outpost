@@ -59,7 +59,8 @@ func Health(args []string) {
 		check("aws creds", "not configured", "run: devbox setup")
 		check("aws updated", "n/a", "")
 	} else {
-		ctx := CommandContext()
+		ctx, cancel := CommandContext()
+		defer cancel() // cancel the context if the aws call fails
 		client, err := awsclient.NewClient(ctx)
 		if err != nil {
 			check("aws creds", "error", err.Error())

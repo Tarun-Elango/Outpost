@@ -63,7 +63,9 @@ func WithRetry(fn func() error) error {
 		if err == nil || !IsBusy(err) {
 			return err
 		}
-		time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+		if attempt < maxRetries-1 {
+			time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+		}
 	}
 	return err
 }
