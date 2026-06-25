@@ -121,6 +121,52 @@ func (r *Runtime) DeleteTemplate(templateID, userID string) error {
 	return db.DeleteTemplateByNameAndUserID(templateID, userID) // delete the template from the local database
 }
 
+// RenameTemplate updates a user-owned template name in the local database.
+// oldName is the current template name (user-facing id in local mode).
+func (r *Runtime) RenameTemplate(oldName, newName, userID string) (*Template, error) {
+	oldName = strings.TrimSpace(oldName)
+	newName = strings.TrimSpace(newName)
+	if oldName == "" {
+		return nil, fmt.Errorf("template id is required")
+	}
+	if newName == "" {
+		return nil, fmt.Errorf("template name is required")
+	}
+
+	db := r.DB()
+
+	record, err := db.GetTemplateByNameAndUserID(oldName, userID)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("template not found: %s", oldName)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if oldName == newName {
+		return &Template{
+			ID:            record.Name,
+			Name:          record.Name,
+			Description:   nullStringValue(record.Description),
+			StartupScript: normalizeStartupScript(nullStringValue(record.StartupScript)),
+		}, nil
+	}
+
+	if err := db.ValidateTemplateNameAvailableForRename(newName, userID, oldName); err != nil {
+		return nil, err
+	}
+	if err := db.UpdateTemplateName(oldName, userID, newName); err != nil {
+		return nil, err
+	}
+
+	return &Template{
+		ID:            newName,
+		Name:          newName,
+		Description:   nullStringValue(record.Description),
+		StartupScript: normalizeStartupScript(nullStringValue(record.StartupScript)),
+	}, nil
+}
+
 // CreateBoxFromTemplates creates a new box applying the given templates' startup scripts.
 func (r *Runtime) CreateBoxFromTemplates(name string, templateIDs []string, publicKey, fromSnapshot, userID, instanceType string, volumeSizeGB int) (*Instance, error) {
 	if len(templateIDs) == 0 {
