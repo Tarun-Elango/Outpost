@@ -11,24 +11,11 @@ import (
 // helper functions for validating ids and flags
 
 var snapshotAmiIDPattern = regexp.MustCompile(`^ami-[0-9a-f]{8,17}$`)
-var ec2InstanceIDPattern = regexp.MustCompile(`^i-[0-9a-f]{8,17}$`)
 
 type resolvedBoxTarget struct {
 	Input string
 	ID    string
 	Name  string
-}
-
-// validateEc2InstanceID validates that the given ID is a valid EC2 instance ID.
-func validateEc2InstanceID(id string) error {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return fmt.Errorf("id is required")
-	}
-	if !ec2InstanceIDPattern.MatchString(strings.ToLower(id)) {
-		return fmt.Errorf("invalid instance ID %q (expected format: i-xxxxxxxx)", id)
-	}
-	return nil
 }
 
 // input: box id or name
@@ -39,13 +26,6 @@ func resolveBoxTarget(mode string, rt *service.Runtime, ref string) (*resolvedBo
 	if ref == "" {
 		return nil, fmt.Errorf("box id or name is required")
 	}
-
-	// if mode == "cloud" {
-	// 	if err := validateEc2InstanceID(ref); err != nil {
-	// 		return nil, fmt.Errorf("cloud mode currently supports box IDs only; box names are not supported yet. Use an instance ID like i-xxxxxxxx instead of %q", ref)
-	// 	}
-	// 	return &resolvedBoxTarget{Input: ref, ID: ref}, nil
-	// }
 
 	if rt == nil {
 		return nil, fmt.Errorf("internal error: runtime is required in local mode")

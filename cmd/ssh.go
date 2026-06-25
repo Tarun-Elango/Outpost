@@ -190,7 +190,7 @@ func SSH(args []string) {
 	}
 
 	var status SshStatusResponse
-	targetLabel := ref
+	var targetLabel string
 	if mode == "local" {
 		rt := mustOpenRuntime()
 		target, err := resolveBoxTarget(mode, rt, ref)
