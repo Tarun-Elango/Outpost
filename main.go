@@ -37,6 +37,7 @@ Commands:
   templates                  					List available templates
   template new <name> [command string] 			Create a new template with a command to run on startup
   template delete <id> 		 					Delete a template
+  template rename <id> <new-name> 				Rename a template
   create --template <template> [<template>...] <name> Create a new box from one or more templates
   create --template <template> [<template>...] <name> --from <snapshot_ami_id> Create from templates and restore from a snapshot
 

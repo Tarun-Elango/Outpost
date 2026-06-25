@@ -15,9 +15,10 @@ const templateNewUsageLine = "usage: devbox template new <name> [command string]
 //
 //	devbox template new <name> [command string] → create a template
 //	devbox template delete <id>                  → delete a template
+//	devbox template rename <id> <new-name>       → rename a template
 func Template(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: devbox template <new|delete> ...")
+		fmt.Fprintln(os.Stderr, "usage: devbox template <new|delete|rename> ...")
 		os.Exit(1)
 	}
 
@@ -29,8 +30,10 @@ func Template(args []string) {
 		TemplateNew(subArgs)
 	case "delete":
 		TemplateDelete(subArgs)
+	case "rename":
+		TemplateRename(subArgs)
 	default:
-		fmt.Fprintf(os.Stderr, "error: unknown subcommand %q (expected %q or %q)\n", sub, "new", "delete")
+		fmt.Fprintf(os.Stderr, "error: unknown subcommand %q (expected %q, %q, or %q)\n", sub, "new", "delete", "rename")
 		os.Exit(1)
 	}
 }
@@ -194,4 +197,68 @@ func TemplateDelete(args []string) {
 	}
 
 	fmt.Printf("Template %s deleted.\n", id)
+}
+
+const templateRenameUsageLine = "usage: devbox template rename <id> <new-name>"
+
+// TemplateRename updates a user-owned template name.
+// Usage: devbox template rename <id> <new-name>
+func TemplateRename(args []string) {
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "error: template id and new name are required")
+		fmt.Fprintln(os.Stderr, templateRenameUsageLine)
+		os.Exit(1)
+	}
+
+	id := strings.TrimSpace(args[0])
+	newName := strings.TrimSpace(args[1])
+	if id == "" {
+		fmt.Fprintln(os.Stderr, "error: template id is required")
+		fmt.Fprintln(os.Stderr, templateRenameUsageLine)
+		os.Exit(1)
+	}
+	if newName == "" {
+		fmt.Fprintln(os.Stderr, "error: new template name is required")
+		fmt.Fprintln(os.Stderr, templateRenameUsageLine)
+		os.Exit(1)
+	}
+	if strings.HasPrefix(id, "--") || strings.HasPrefix(newName, "--") {
+		fmt.Fprintf(os.Stderr, "error: unknown flag\n")
+		os.Exit(1)
+	}
+	if len(args) > 2 {
+		fmt.Fprintln(os.Stderr, templateRenameUsageLine)
+		os.Exit(1)
+	}
+
+	if TestMode {
+		fmt.Printf("[test] template rename: id=%q newName=%q\n", id, newName)
+		return
+	}
+
+	mode, err := service.EnsureLocalModeAndGetCurrMode()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if mode != "local" {
+		fmt.Fprintf(os.Stderr, "error: template rename is only supported in local mode\n")
+		os.Exit(1)
+	}
+
+	rt := mustOpenRuntime()
+	defer func() { _ = rt.Close() }()
+	renamed, err := rt.RenameTemplate(id, newName, service.LocalUserID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			fmt.Fprintf(os.Stderr, "template %s not found\n", id)
+		} else if strings.Contains(err.Error(), "already exists") {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "template rename failed: %v\n", err)
+		}
+		os.Exit(1)
+	}
+
+	fmt.Printf("Template %s renamed to %s.\n", id, renamed.Name)
 }
