@@ -232,13 +232,15 @@ func (db *DB) ValidateInstanceNameAvailableForRename(name, userID, currentAwsIns
 	}
 
 	record, err := db.GetInstanceByNameAndUserID(name, userID)
-	if err == sql.ErrNoRows {
+	if err == sql.ErrNoRows { // if the name is not found, return nil
 		return nil
 	}
-	if err != nil {
+	if err != nil { // if there is an error, return it
 		return err
 	}
-	if record.AwsInstanceID == currentAwsInstanceID {
+	// at this point, the name is found, but we need to check if its the same box
+
+	if record.AwsInstanceID == currentAwsInstanceID { //if the aws instance id is the same as the current instance id, return nil, meaning its the same box
 		return nil
 	}
 	return fmt.Errorf("box name already exists: %s", name)

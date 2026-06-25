@@ -205,8 +205,12 @@ func UpdateHost(name, ipAddress string) error {
 			}
 		}
 		if !hostnameUpdated {
-			insert := []string{"    HostName " + ipAddress}
-			blockLines = append(blockLines[:1], append(insert, blockLines[1:]...)...)
+			insert := "    HostName " + ipAddress
+			updatedBlock := make([]string, 0, len(blockLines)+1)
+			updatedBlock = append(updatedBlock, blockLines[0])
+			updatedBlock = append(updatedBlock, insert)
+			updatedBlock = append(updatedBlock, blockLines[1:]...)
+			blockLines = updatedBlock
 		}
 
 		newLines := append(lines[:block.start], append(blockLines, lines[block.end:]...)...) //[ everything before the host block ] + [ the updated block ] + [ everything after the host block ]

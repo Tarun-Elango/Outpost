@@ -2,8 +2,12 @@ package localDb
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
+
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // TemplateRecord is a row from the templates table.
@@ -128,7 +132,8 @@ func (db *DB) UpdateTemplateName(oldName, userID, newName string) error {
 		newName, oldName, userID,
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed: templates.user_id, templates.name") {
+		var sqliteErr *sqlite.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
 			return fmt.Errorf("template name already exists: %s", newName)
 		}
 		return fmt.Errorf("update template name for %s: %w", oldName, err)

@@ -534,14 +534,14 @@ func (r *Runtime) syncInstanceFromAWSByID(instanceID string) (*Instance, error) 
 // RenameInstance updates a local box name. AWS is updated first so the Name tag
 // remains the source of truth; DB and SSH config are best-effort follow-ups.
 func (r *Runtime) RenameInstance(instanceID, userID, newName string) (*Instance, error) {
-	newName = strings.TrimSpace(newName)
+	newName = strings.TrimSpace(newName) // trim the name
 	db := r.DB()
 
-	record, err := requireOwnedInstance(db, instanceID, userID)
+	record, err := requireOwnedInstance(db, instanceID, userID) // check if the instance is owned by the user
 	if err != nil {
 		return nil, err
 	}
-	if err := db.ValidateInstanceNameAvailableForRename(newName, userID, instanceID); err != nil {
+	if err := db.ValidateInstanceNameAvailableForRename(newName, userID, instanceID); err != nil { // check if the name is available
 		return nil, err
 	}
 
@@ -551,13 +551,16 @@ func (r *Runtime) RenameInstance(instanceID, userID, newName string) (*Instance,
 	}
 
 	ctx := r.Context()
+	// ec2 update
 	if err := updateInstanceNameTag(ctx, ec2Client, instanceID, newName); err != nil {
 		return nil, err
 	}
 
+	// db update
 	if err := db.UpdateInstanceName(instanceID, userID, newName); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: AWS name tag updated but failed to update local database; run devbox ls to resync: %v\n", err)
 	}
+	// ssh config update
 	if err := RenameHost(record.Name, newName); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: box renamed but failed to update SSH config after retries: %v\n", err)
 	}

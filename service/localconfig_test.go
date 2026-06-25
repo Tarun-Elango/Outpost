@@ -22,6 +22,24 @@ func writeTestSSHConfig(t *testing.T, content string) string {
 	return path
 }
 
+func TestUpdateHostInsertsHostNameWithoutOverwritingFollowingBlock(t *testing.T) {
+	path := writeTestSSHConfig(t, "Host devbox-alpha\n    User ec2-user\n\nHost devbox-beta\n    HostName 10.0.0.2\n")
+
+	if err := UpdateHost("alpha", "10.0.0.1"); err != nil {
+		t.Fatalf("update host: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	got := string(data)
+	want := "Host devbox-alpha\n    HostName 10.0.0.1\n    User ec2-user\n\nHost devbox-beta\n    HostName 10.0.0.2\n"
+	if got != want {
+		t.Fatalf("ssh config = %q, want %q", got, want)
+	}
+}
+
 func TestRenameHostPreservesOptionsAndOtherHosts(t *testing.T) {
 	path := writeTestSSHConfig(t, "Host github.com\n    HostName github.com\n\nHost devbox-alpha alpha-extra\n    HostName 10.0.0.1\n    User ec2-user\n")
 
