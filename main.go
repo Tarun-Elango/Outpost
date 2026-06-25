@@ -20,6 +20,7 @@ Commands:
   create <name>       Create a new box
   ls                  List all boxes
   status <id|name>         Show details for a box
+  rename <id|name> <new-name> Rename a box
   stop <id|name>           Stop a running box
   start <id|name>          Start a stopped box
   delete <id|name>         Delete a box
@@ -36,6 +37,7 @@ Commands:
   templates                  					List available templates
   template new <name> [command string] 			Create a new template with a command to run on startup
   template delete <id> 		 					Delete a template
+  template rename <id> <new-name> 				Rename a template
   create --template <template> [<template>...] <name> Create a new box from one or more templates
   create --template <template> [<template>...] <name> --from <snapshot_ami_id> Create from templates and restore from a snapshot
 
@@ -87,6 +89,8 @@ func main() {
 		cmd.Ls()
 	case "status":
 		cmd.Status(args)
+	case "rename":
+		cmd.Rename(args)
 	case "stop":
 		cmd.Stop(args)
 	case "start":

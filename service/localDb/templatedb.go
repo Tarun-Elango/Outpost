@@ -2,7 +2,12 @@ package localDb
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
+
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // TemplateRecord is a row from the templates table.
@@ -88,6 +93,57 @@ func (db *DB) DeleteTemplateByNameAndUserID(name, userID string) error {
 	_, err := db.conn.Exec(`DELETE FROM templates WHERE name = ? AND user_id = ?`, name, userID)
 	if err != nil {
 		return fmt.Errorf("delete template %s: %w", name, err)
+	}
+	return nil
+}
+
+// ValidateTemplateNameAvailableForRename verifies that newName can be used for an
+// existing template. The current template may keep its own name.
+func (db *DB) ValidateTemplateNameAvailableForRename(newName, userID, currentName string) error {
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		return fmt.Errorf("template name is required")
+	}
+
+	record, err := db.GetTemplateByNameAndUserID(newName, userID)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if record.Name == currentName {
+		return nil
+	}
+	return fmt.Errorf("template name already exists: %s", newName)
+}
+
+// UpdateTemplateName updates a template's name in the local database.
+func (db *DB) UpdateTemplateName(oldName, userID, newName string) error {
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		return fmt.Errorf("template name is required")
+	}
+
+	result, err := db.conn.Exec(`
+		UPDATE templates
+		SET name = ?
+		WHERE name = ? AND user_id = ?`,
+		newName, oldName, userID,
+	)
+	if err != nil {
+		var sqliteErr *sqlite.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
+			return fmt.Errorf("template name already exists: %s", newName)
+		}
+		return fmt.Errorf("update template name for %s: %w", oldName, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update template name for %s: %w", oldName, err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("template not found: %s", oldName)
 	}
 	return nil
 }
