@@ -1,9 +1,9 @@
 # devbox-cli
 
-Manage remote dev boxes from the CLI — provision, connect, or destroy them. 
-Support: linux, macos
-Infrastructure: AWS EC2
-Usage: run locally with your AWS access key and secret key stored on your machine
+Manage remote dev boxes from the CLI — provision, connect, or destroy them.  
+Support: linux, macos  
+Infrastructure: AWS EC2  
+Usage: run locally with an AWS access key and secret key stored on the machine
 
 ## Table of Contents
 - [Download and Install (from GitHub release)](#download-and-install-from-github-release)
