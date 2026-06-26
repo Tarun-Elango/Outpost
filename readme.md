@@ -121,29 +121,29 @@ Run `devbox` with no arguments to print usage, or see the table below.
 | --- | --- |
 | `create <name>` | Create a new box |
 | `ls` | List all boxes |
-| `status <id|name>` | Show details for a box |
-| `rename <id|name> <new-name>` | Rename a box |
-| `resize|upgrade <id|name>` | Resize a stopped box instance type or root disk |
-| `stop <id|name>` | Stop a running box |
-| `start <id|name>` | Start a stopped box |
-| `restart|reboot <id|name>` | Reboot a running box |
-| `delete <id|name>` | Delete a box |
+| `status <id-or-name>` | Show details for a box |
+| `rename <id-or-name> <new-name>` | Rename a box |
+| `resize <id-or-name>` or `upgrade <id-or-name>` | Resize a stopped box instance type or root disk |
+| `stop <id-or-name>` | Stop a running box |
+| `start <id-or-name>` | Start a stopped box |
+| `restart <id-or-name>` or `reboot <id-or-name>` | Reboot a running box |
+| `delete <id-or-name>` | Delete a box |
 
 ### Connect and transfer
 
 | Command | Notes |
 | --- | --- |
-| `ssh [-i key] <id|name>` | Open an SSH session to a box (`-i` path to private key; default `~/.ssh/id_ed25519`) |
+| `ssh [-i key] <id-or-name>` | Open an SSH session to a box (`-i` path to private key; default `~/.ssh/id_ed25519`) |
 | `cp [-i key] <source> <dest>` | Copy a file to or from a box (e.g. `devbox cp ./main.go mybox:/home/ec2-user/app/`) |
 | `sync [-i key] [--delete] <source> <dest>` | Sync files or directories to or from a box (`--delete` removes destination files missing from source) |
-| `exec [-i key] [-s] [-t] <id|name> -- <command>` | Run a one-off command on a running box (`-s` run through `sh`; `-t` allocate a TTY) |
-| `forward <id|name> <port>` | Forward a port from a box |
+| `exec [-i key] [-s] [-t] <id-or-name> -- <command>` | Run a one-off command on a running box (`-s` run through `sh`; `-t` allocate a TTY) |
+| `forward <id-or-name> <port>` | Forward a port from a box |
 
 ### Snapshots
 
 | Command | Notes |
 | --- | --- |
-| `snapshot <id|name> [name]` | Create a snapshot of a box |
+| `snapshot <id-or-name> [name]` | Create a snapshot of a box |
 | `snapshots` | List all your snapshots |
 | `snapshots ls <amiId>` | Show details for a specific snapshot |
 | `snapshots delete <amiId>` | Delete a snapshot |
@@ -164,10 +164,10 @@ Run `devbox` with no arguments to print usage, or see the table below.
 
 | Command | Notes |
 | --- | --- |
-| `idle-stop <id|name> in <minutes>` | Stop the box after `<minutes>` minutes of inactivity |
-| `idle-stop <id|name> show` | Show the idle stop for a box |
-| `idle-stop <id|name> update <minutes>` | Update the idle stop for a box |
-| `idle-stop <id|name> delete` | Delete the idle stop for a box |
+| `idle-stop <id-or-name> in <minutes>` | Stop the box after `<minutes>` minutes of inactivity |
+| `idle-stop <id-or-name> show` | Show the idle stop for a box |
+| `idle-stop <id-or-name> update <minutes>` | Update the idle stop for a box |
+| `idle-stop <id-or-name> delete` | Delete the idle stop for a box |
 
 ## Notes on local config (`~/.devbox`)
 
