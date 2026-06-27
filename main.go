@@ -40,7 +40,8 @@ Commands:
                                devbox sync mybox:/home/ec2-user/project ./project
   exec [-i key] [-s] [-t] <id|name> -- <command>
                              Run a one-off command on a running box
-                             -s  Run command through sh on the box (for pipes, &&, cd, etc.)
+                             -s  Run as a shell snippet via sh -lc (for pipes, &&, cd);
+                                 joins arguments and does not preserve per-arg boundaries
                              -t  Allocate a pseudo-TTY (for sudo / interactive commands)
   forward <id|name> <port> Forward a port from a box
 

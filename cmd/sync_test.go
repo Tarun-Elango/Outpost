@@ -7,7 +7,16 @@ import (
 
 func TestSyncRemoteShellWithIdentity(t *testing.T) {
 	got := syncRemoteShell("/tmp/key", "22")
-	want := "ssh -i /tmp/key -p 22 -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new"
+	want := "ssh -i '/tmp/key' -p 22 -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new"
+
+	if got != want {
+		t.Fatalf("syncRemoteShell() = %q, want %q", got, want)
+	}
+}
+
+func TestSyncRemoteShellWithIdentitySpaces(t *testing.T) {
+	got := syncRemoteShell("/path with spaces/key", "22")
+	want := "ssh -i '/path with spaces/key' -p 22 -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new"
 
 	if got != want {
 		t.Fatalf("syncRemoteShell() = %q, want %q", got, want)
@@ -23,7 +32,7 @@ func TestBuildRsyncArgsUpload(t *testing.T) {
 	got := buildRsyncArgs("/tmp/key", transfer, "ec2-user", "203.0.113.10", "22", false)
 	want := []string{
 		"-az",
-		"-e", "ssh -i /tmp/key -p 22 -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new",
+		"-e", "ssh -i '/tmp/key' -p 22 -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new",
 		"./project",
 		"ec2-user@203.0.113.10:/home/ec2-user/project",
 	}

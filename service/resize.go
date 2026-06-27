@@ -59,9 +59,24 @@ func (r *Runtime) ResizeInstance(instanceID, userID, newInstanceType string, new
 	}
 	ctx := r.Context()
 
-	// first, we will check if the volume size is being changed and if it is, we will modify the volume size
+	// Apply instance type first (reversible while stopped); volume resize last (irreversible).
+	if newInstanceType != "" && newInstanceType != current.InstanceType {
+		if err := ValidateInstanceType(newInstanceType); err != nil {
+			return nil, err
+		}
+		_, err := ec2Client.ModifyInstanceAttribute(ctx, &ec2.ModifyInstanceAttributeInput{
+			InstanceId: aws.String(instanceID),
+			InstanceType: &types.AttributeValue{
+				Value: aws.String(newInstanceType),
+			},
+		})
+		if err != nil {
+			return nil, awsclient.WrapError("modify instance type", err)
+		}
+	}
+
 	if newVolumeSizeGB > 0 {
-		volume, err := r.getRootVolumeFromAWS(awsInstance) // get the root volume from AWS
+		volume, err := r.getRootVolumeFromAWS(awsInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -75,28 +90,11 @@ func (r *Runtime) ResizeInstance(instanceID, userID, newInstanceType string, new
 			}
 			_, err = ec2Client.ModifyVolume(ctx, &ec2.ModifyVolumeInput{
 				VolumeId: volume.VolumeId,
-				Size:     aws.Int32(int32(newVolumeSizeGB)), // set the new volume size
+				Size:     aws.Int32(int32(newVolumeSizeGB)),
 			})
 			if err != nil {
 				return nil, awsclient.WrapError("modify root volume", err)
 			}
-		}
-	}
-
-	// second, we will check if the instance type is being changed and if it is, we will modify the instance type
-	if newInstanceType != "" && newInstanceType != current.InstanceType {
-		if err := ValidateInstanceType(newInstanceType); err != nil {
-			return nil, err
-		}
-		// modify the instance type
-		_, err := ec2Client.ModifyInstanceAttribute(ctx, &ec2.ModifyInstanceAttributeInput{
-			InstanceId: aws.String(instanceID),
-			InstanceType: &types.AttributeValue{
-				Value: aws.String(newInstanceType), // set the new instance type
-			},
-		})
-		if err != nil {
-			return nil, awsclient.WrapError("modify instance type", err)
 		}
 	}
 

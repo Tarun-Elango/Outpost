@@ -17,11 +17,12 @@ func syncRemoteShell(identity, portArg string) string {
 		"-o", "StrictHostKeyChecking=accept-new",
 	}
 	if identity != "" {
-		parts = append([]string{"ssh", "-i", identity}, parts[1:]...)
+		parts = append([]string{"ssh", "-i", shellQuote(identity)}, parts[1:]...)
 	}
-	return strings.Join(parts, " ")
+	return strings.Join(parts, " ") // return sync remote shell command
 }
 
+// build the rsync command
 func buildRsyncArgs(identity string, transfer cpTransfer, user, host, portArg string, deleteExtra bool) []string {
 	remote := fmt.Sprintf("%s@%s:%s", user, host, transfer.Remote)
 	argv := []string{

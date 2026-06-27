@@ -742,7 +742,7 @@ func (r *Runtime) RebootInstance(instanceID, userID string) error {
 	}
 
 	if _, err := r.syncInstanceFromAWSByID(instanceID); err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "warning: instance rebooted but failed to refresh local state; run devbox ls to resync: %v\n", err)
 	}
 	return nil
 }

@@ -99,6 +99,10 @@ func shellQuote(arg string) string {
 	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
 }
 
+// buildExecRemoteCommand formats remote argv for SSH exec.
+// When throughShell is true, remoteCommand is joined into one shell snippet
+// executed via sh -lc, so original argument boundaries are not preserved.
+// Otherwise each argument is shell-quoted individually and passed as-is.
 func buildExecRemoteCommand(remoteCommand []string, throughShell bool) []string {
 	if throughShell {
 		return []string{"sh -lc " + shellQuote(strings.Join(remoteCommand, " "))}
@@ -317,7 +321,7 @@ func Exec(args []string) {
 	}
 	fs := flag.NewFlagSet("exec", flag.ExitOnError)
 	identity := fs.String("i", defaultKeyPath(), "path to SSH private key") // something like ~/.ssh/id_ed25519
-	throughShell := fs.Bool("s", false, "run command through sh on the box")
+	throughShell := fs.Bool("s", false, "run as a shell snippet via sh -lc (pipes, &&, cd); joins arguments and does not preserve per-arg boundaries (see buildExecRemoteCommand)")
 	allocateTTY := fs.Bool("t", false, "allocate a pseudo-TTY")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: devbox exec [-i identity] [-s] [-t] <id|name> -- <command>")
