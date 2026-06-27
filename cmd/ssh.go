@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -91,6 +92,29 @@ func sshBaseArgs(identity, portArg string) []string {
 	return argv
 }
 
+func shellQuote(arg string) string {
+	if arg == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
+}
+
+// buildExecRemoteCommand formats remote argv for SSH exec.
+// When throughShell is true, remoteCommand is joined into one shell snippet
+// executed via sh -lc, so original argument boundaries are not preserved.
+// Otherwise each argument is shell-quoted individually and passed as-is.
+func buildExecRemoteCommand(remoteCommand []string, throughShell bool) []string {
+	if throughShell {
+		return []string{"sh -lc " + shellQuote(strings.Join(remoteCommand, " "))}
+	}
+
+	quoted := make([]string, 0, len(remoteCommand))
+	for _, arg := range remoteCommand {
+		quoted = append(quoted, shellQuote(arg))
+	}
+	return []string{strings.Join(quoted, " ")}
+}
+
 // checkDevboxReady runs one SSH probe for the user-data ready marker.
 // Returns (true, nil) when ready, (false, nil) when SSH works but provisioning
 // is incomplete, and (false, err) when SSH is not reachable yet.
@@ -157,31 +181,17 @@ func SSH(args []string) {
 		fmt.Println("[test] ssh: done")
 		return
 	}
-	fs := flag.NewFlagSet("ssh", flag.ExitOnError)
-	identity := fs.String("i", defaultKeyPath(), "path to SSH private key") // ssh picks the ssh private key for creating the connection
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: devbox ssh [-i identity] <id|name> [-- ssh-args...]")
-		fs.PrintDefaults()
+	usage := func() {
+		fmt.Fprintln(os.Stderr, "usage: devbox ssh [-i key] <id|name>")
 	}
 
-	// Split args on "--" to allow passing raw flags to ssh.
-	var extra []string
-	for i, a := range args {
-		if a == "--" {
-			extra = args[i+1:]
-			args = args[:i]
-			break
-		}
-	}
-
-	if err := fs.Parse(args); err != nil {
+	parsed, err := parseSSHCommandArgs(args, defaultKeyPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ssh: %v\n", err)
+		usage()
 		os.Exit(1)
 	}
-	if fs.NArg() != 1 {
-		fs.Usage()
-		os.Exit(1)
-	}
-	ref := fs.Arg(0)
+	ref := parsed.Ref
 
 	mode, err := service.EnsureLocalModeAndGetCurrMode()
 	if err != nil {
@@ -272,19 +282,163 @@ func SSH(args []string) {
 
 	target := fmt.Sprintf("%s@%s", defaultSSHUser, b.PublicIP)
 
-	if err := waitForDevboxReady(sshBin, *identity, defaultSSHUser, b.PublicIP, defaultSSHPort); err != nil {
+	if err := waitForDevboxReady(sshBin, parsed.Identity, defaultSSHUser, b.PublicIP, defaultSSHPort); err != nil {
 		fmt.Fprintf(os.Stderr, "ssh: %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Fprintf(os.Stderr, "Connecting to %s (box %s)...\n", target, targetLabel)
 
-	argv := append([]string{sshBin}, sshBaseArgs(*identity, defaultSSHPort)...) // create ssh command
+	argv := append([]string{sshBin}, sshBaseArgs(parsed.Identity, defaultSSHPort)...) // create ssh command
 	argv = append(argv, target)
-	argv = append(argv, extra...)
+	argv = append(argv, parsed.Extra...)
 
 	if err := syscall.Exec(sshBin, argv, os.Environ()); err != nil {
 		fmt.Fprintf(os.Stderr, "ssh: exec failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// Exec runs a one-off command on a running box over SSH.
+func Exec(args []string) {
+	if TestMode {
+		fmt.Println("[test] exec: done")
+		return
+	}
+	fs := flag.NewFlagSet("exec", flag.ExitOnError)
+	identity := fs.String("i", defaultKeyPath(), "path to SSH private key") // something like ~/.ssh/id_ed25519
+	throughShell := fs.Bool("s", false, "run as a shell snippet via sh -lc (pipes, &&, cd); joins arguments and does not preserve per-arg boundaries (see buildExecRemoteCommand)")
+	allocateTTY := fs.Bool("t", false, "allocate a pseudo-TTY")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: devbox exec [-i identity] [-s] [-t] <id|name> -- <command>")
+		fs.PrintDefaults()
+	}
+
+	var remoteCommand []string
+	for i, a := range args {
+		if a == "--" {
+			remoteCommand = args[i+1:]
+			args = args[:i]
+			break
+		}
+	}
+
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+	if fs.NArg() != 1 || len(remoteCommand) == 0 {
+		fs.Usage()
+		os.Exit(1)
+	}
+	ref := fs.Arg(0)
+
+	mode, err := service.EnsureLocalModeAndGetCurrMode()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	var status SshStatusResponse
+	if mode == "local" {
+		rt := mustOpenRuntime()
+		target, err := resolveBoxTarget(mode, rt, ref)
+		if err != nil {
+			_ = rt.Close()
+			fmt.Fprintf(os.Stderr, "exec: %v\n", err)
+			os.Exit(1)
+		}
+		sshStatus, err := rt.GetSshStatus(target.ID, service.LocalUserID)
+		closeErr := rt.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "exec: %v\n", err)
+			os.Exit(1)
+		}
+		if closeErr != nil {
+			fmt.Fprintf(os.Stderr, "exec: %v\n", closeErr)
+			os.Exit(1)
+		}
+		status.Ready = sshStatus.Ready
+		if sshStatus.Instance != nil {
+			box := instancesToBoxes([]*service.Instance{sshStatus.Instance})[0]
+			status.Instance = &box
+		}
+	} else {
+		target, err := resolveBoxTarget(mode, nil, ref)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "exec: %v\n", err)
+			os.Exit(1)
+		}
+		client, err := api.NewDefault()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+
+		resp, err := client.Get("/v2/boxes/" + target.ID + "/ssh-status")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "exec: %v\n", err)
+			os.Exit(1)
+		}
+		if err := api.CheckStatus(resp); err != nil {
+			fmt.Fprintf(os.Stderr, "exec: %v\n", err)
+			os.Exit(1)
+		}
+		if err := api.DecodeJSON(resp, &status); err != nil {
+			fmt.Fprintf(os.Stderr, "exec: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if !status.Ready {
+		fmt.Fprintln(os.Stderr, "exec: box is not ready yet.")
+		os.Exit(1)
+	}
+	if status.Instance == nil {
+		fmt.Fprintln(os.Stderr, "exec: server reported ready but returned no instance details, try the command again in a few minutes.")
+		os.Exit(1)
+	}
+
+	b := *status.Instance
+	if b.PublicIP == "" {
+		fmt.Fprintln(os.Stderr, "exec: box has no IP address (is it running?)")
+		os.Exit(1)
+	}
+	if b.Status != "running" {
+		fmt.Fprintf(os.Stderr, "exec: box is %s, not running\n", b.Status)
+		os.Exit(1)
+	}
+
+	sshBin, err := exec.LookPath("ssh")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "exec: ssh binary not found in PATH")
+		os.Exit(1)
+	}
+
+	if err := waitForDevboxReady(sshBin, *identity, defaultSSHUser, b.PublicIP, defaultSSHPort); err != nil {
+		fmt.Fprintf(os.Stderr, "exec: %v\n", err)
+		os.Exit(1)
+	}
+
+	target := fmt.Sprintf("%s@%s", defaultSSHUser, b.PublicIP)
+	argv := sshBaseArgs(*identity, defaultSSHPort)
+	if *allocateTTY {
+		argv = append(argv, "-t")
+	}
+	argv = append(argv, target)
+	argv = append(argv, buildExecRemoteCommand(remoteCommand, *throughShell)...)
+
+	fmt.Fprintln(os.Stderr, "exec: trying command...")
+
+	cmd := execCommand(sshBin, argv...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		}
+		fmt.Fprintf(os.Stderr, "exec: ssh failed: %v\n", err)
 		os.Exit(1)
 	}
 }

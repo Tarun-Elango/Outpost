@@ -1,6 +1,9 @@
 # devbox-cli
 
-Manage remote dev boxes from the CLI — provision, connect, or destroy them. 
+Manage remote dev boxes from the CLI — provision, connect, or destroy them.  
+Support: linux, macos  
+Infrastructure: AWS EC2  
+Usage: run locally with an AWS access key and secret key (stored locally)
 
 ## Table of Contents
 - [Download and Install (from GitHub release)](#download-and-install-from-github-release)
@@ -12,7 +15,7 @@ Manage remote dev boxes from the CLI — provision, connect, or destroy them.
 
 ## Download and Install (from GitHub release)
 
-Every push to `main` publishes Linux and macOS binaries to the [`latest` release](https://github.com/Tarun-Elango/devboxssh-cli/releases/tag/latest). The snippet below prints your OS and CPU architecture so you can pick the matching release asset and install it as `devbox`:
+Every push to `main` publishes Linux and macOS binaries to the [`latest` release](https://github.com/Tarun-Elango/devbox-cli/releases/tag/latest). The snippet below prints your OS and CPU architecture so you can pick the matching release asset and install it as `devbox`:
 
 ```bash
 echo "Detected OS: $(uname -s), architecture: $(uname -m)"
@@ -21,7 +24,7 @@ echo "Detected OS: $(uname -s), architecture: $(uname -m)"
 # Linux arm64   -> devbox-linux-arm64
 # macOS x86_64  -> devbox-darwin-amd64
 # macOS arm64   -> devbox-darwin-arm64
-curl -fsSL "https://github.com/Tarun-Elango/devboxssh-cli/releases/download/latest/devbox-<linux-or-darwin>-<amd64-or-arm64>" -o /tmp/devbox
+curl -fsSL "https://github.com/Tarun-Elango/devbox-cli/releases/download/latest/devbox-<linux-or-darwin>-<amd64-or-arm64>" -o /tmp/devbox
 chmod +x /tmp/devbox
 sudo install -m 755 /tmp/devbox /usr/local/bin/devbox
 ```
@@ -43,7 +46,7 @@ echo "Detected OS: $(uname -s), architecture: $(uname -m)"
 # macOS x86_64  -> devbox-darwin-amd64
 # macOS arm64   -> devbox-darwin-arm64
 mkdir -p ~/.local/bin
-curl -fsSL "https://github.com/Tarun-Elango/devboxssh-cli/releases/download/latest/devbox-<linux-or-darwin>-<amd64-or-arm64>" -o ~/.local/bin/devbox
+curl -fsSL "https://github.com/Tarun-Elango/devbox-cli/releases/download/latest/devbox-<linux-or-darwin>-<amd64-or-arm64>" -o ~/.local/bin/devbox
 chmod +x ~/.local/bin/devbox
 export PATH="$HOME/.local/bin:$PATH"
 ```
@@ -102,36 +105,72 @@ devbox ls
 
 ---
 
-## Common commands:
+## Common commands
 
-usage method: devbox command
+Run `devbox` with no arguments to print usage, or see the table below.
 
-| Command                                    | Notes (what it does)                                    |
-| ------------------------------------------ | ------------------------------------------------------- |
-| `setup`                                    | Configure/change AWS credentials and region (stored in `~/.devbox/config.json`) |
-| `create <name>`                            | Create a new box                                        |
-| `ls`                                       | List all boxes                                          |
-| `status <id>`                              | Show details for a box                                  |
-| `stop <id>`                                | Stop a running box                                      |
-| `start <id>`                               | Start a stopped box                                     |
-| `delete <id>`                              | Delete a box                                            |
-| `ssh <id>`                                 | Open an SSH session to a box                            |
-| `forward <id> <port>`                      | Forward a port from a box                               |
-| `snapshot <id> [name]`                     | Create a snapshot of a box                              |
-| `snapshots`                                | List all your snapshots                                 |
-| `snapshots ls <amiId>`                     | Show details for a specific snapshot                    |
-| `snapshots delete <amiId>`                 | Delete a snapshot                                       |
-| `create <name> [--from <snapshot_ami_id>]` | Create a new box (optionally restore from a snapshot)   |
-| `templates`                                | List available templates                                |
-| `template new <name> [command string]`     | Create a new template with a command to run on startup  |
-| `template delete <id>`                     | Delete a template                                       |
-| `template rename <id> <new-name>`        | Rename a template                                       |
+### Config and health
+
+| Command | Notes |
+| --- | --- |
+| `version` | Show the devbox CLI version |
+| `setup` | Configure/change AWS credentials and region (stored in `~/.devbox/config.json`) |
+| `clear-creds` | Clear saved AWS credentials from `~/.devbox/config.json` |
+| `health` | Check config, AWS credentials, region, and database |
+
+### Boxes
+
+| Command | Notes |
+| --- | --- |
+| `create <name>` | Create a new box |
+| `ls` | List all boxes |
+| `status <id-or-name>` | Show details for a box |
+| `rename <id-or-name> <new-name>` | Rename a box |
+| `resize <id-or-name>` or `upgrade <id-or-name>` | Resize a stopped box instance type or root disk |
+| `stop <id-or-name>` | Stop a running box |
+| `start <id-or-name>` | Start a stopped box |
+| `restart <id-or-name>` or `reboot <id-or-name>` | Reboot a running box |
+| `delete <id-or-name>` | Delete a box |
+
+### Connect and transfer
+
+| Command | Notes |
+| --- | --- |
+| `ssh [-i key] <id-or-name>` | Open an SSH session to a box (`-i` path to private key; default `~/.ssh/id_ed25519`) |
+| `cp [-i key] <source> <dest>` | Copy a file to or from a box (e.g. `devbox cp ./main.go mybox:/home/ec2-user/app/`) |
+| `sync [-i key] [--delete] <source> <dest>` | Sync files or directories to or from a box (`--delete` removes destination files missing from source) |
+| `exec [-i key] [-s] [-t] <id-or-name> -- <command>` | Run a one-off command on a running box (`-s` run through `sh`; `-t` allocate a TTY) |
+| `forward <id-or-name> <port>` | Forward a port from a box |
+
+### Snapshots
+
+| Command | Notes |
+| --- | --- |
+| `snapshot <id-or-name> [name]` | Create a snapshot of a box |
+| `snapshots` | List all your snapshots |
+| `snapshots ls <amiId>` | Show details for a specific snapshot |
+| `snapshots delete <amiId>` | Delete a snapshot |
+| `create <name> [--from <snapshot_ami_id>]` | Create a new box (optionally restore from a snapshot) |
+
+### Templates
+
+| Command | Notes |
+| --- | --- |
+| `templates` | List available templates |
+| `template new <name> [command string]` | Create a new template with a command to run on startup |
+| `template delete <id>` | Delete a template |
+| `template rename <id> <new-name>` | Rename a template |
 | `create --template <template> [<template>...] <name>` | Create a new box from one or more templates |
 | `create --template <template> [<template>...] <name> --from <snapshot_ami_id>` | Create from templates and restore from a snapshot |
-| `idle-stop <id> in <minutes>` | Stop the box after <minutes> minutes of inactivity |
-| `idle-stop <id> show` | Show the idle stop for a box |
-| `idle-stop <id> update <minutes>` | Update the idle stop for a box |
-| `idle-stop <id> delete` | Delete the idle stop for a box |
+
+### Idle stop
+
+| Command | Notes |
+| --- | --- |
+| `idle-stop <id-or-name> in <minutes>` | Stop the box after `<minutes>` minutes of inactivity |
+| `idle-stop <id-or-name> show` | Show the idle stop for a box |
+| `idle-stop <id-or-name> update <minutes>` | Update the idle stop for a box |
+| `idle-stop <id-or-name> delete` | Delete the idle stop for a box |
 
 ## Notes on local config (`~/.devbox`)
 
