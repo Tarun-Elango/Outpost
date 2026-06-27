@@ -77,7 +77,11 @@ jobs:
             git tag -d latest
           fi
 
-          git push origin :refs/tags/latest || true
+          if git ls-remote --exit-code --tags origin "refs/tags/latest" >/dev/null 2>&1; then
+            git push origin :refs/tags/latest
+          else
+            echo "Remote latest tag does not exist yet."
+          fi
 
           gh release create latest \
             dist/devbox-linux-amd64 \
