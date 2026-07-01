@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"devbox-cli/helper"
 )
 
 func syncRemoteShell(identity, portArg string) string {
@@ -40,10 +42,6 @@ func buildRsyncArgs(identity string, transfer cpTransfer, user, host, portArg st
 
 // Sync synchronizes files or directories between the local machine and a devbox using rsync.
 func Sync(args []string) {
-	if TestMode {
-		fmt.Println("[test] sync: done")
-		return
-	}
 
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
 	fs.Usage = func() {
@@ -53,7 +51,7 @@ func Sync(args []string) {
 		fmt.Fprintln(os.Stderr, "  devbox sync mybox:/home/ec2-user/project ./project")
 	}
 
-	parsed, err := parseSyncCommandArgs(args, cpDefaultKeyPath())
+	parsed, err := helper.ParseSyncCommandArgs(args, cpDefaultKeyPath())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sync: %v\n", err)
 		fs.Usage()
