@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"strconv"
+	"syscall"
 
 	"devbox-cli/helper"
 	"devbox-cli/service"
@@ -103,9 +105,13 @@ func Forward(args []string) {
 	fmt.Printf("Forwarded: http://localhost:%d  (Ctrl+C to stop)\n", localPort)
 
 	if err := cmd.Wait(); err != nil {
-		// ssh exits non-zero when killed by a signal (Ctrl+C) — that's expected.
-		if cmd.ProcessState != nil && !cmd.ProcessState.Success() {
-			os.Exit(0)
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+				os.Exit(0)
+			}
+			fmt.Fprintf(os.Stderr, "forward: ssh exited: %v\n", err)
+			os.Exit(exitErr.ExitCode())
 		}
 		fmt.Fprintf(os.Stderr, "forward: ssh exited: %v\n", err)
 		os.Exit(1)
