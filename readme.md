@@ -2,7 +2,7 @@
 
 Manage remote dev boxes from the CLI — provision, connect, or destroy them.  
 Support: linux, macos  
-Infrastructure: AWS EC2  
+Requirements: Aws account, linux or macos
 Usage: run locally with an AWS access key and secret key (stored locally)
 
 ## Table of Contents
@@ -29,6 +29,8 @@ devbox ls
 ```
 
 To install system-wide (no shell config changes — `/usr/local/bin` is usually already on PATH):
+
+Same script as above, but installs to `/usr/local/bin` for all users on the machine; requires `sudo`, and skips editing your shell config.
 
 ```bash
 INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/main/scripts/install.sh | sudo bash
@@ -107,6 +109,7 @@ Run `devbox` with no arguments to print usage, or see the table below.
 | Command | Notes |
 | --- | --- |
 | `version` | Show the devbox CLI version |
+| `update` | Check GitHub releases for a newer version and install it after confirmation |
 | `setup` | Configure/change AWS credentials and region (stored in `~/.devbox/config.json`) |
 | `clear-creds` | Clear saved AWS credentials from `~/.devbox/config.json` |
 | `health` | Check config, AWS credentials, region, and database |
@@ -195,4 +198,4 @@ Create a dedicated IAM user for devbox.
 devbox setup
 ```
 
-Enter the access key, secret, and your preferred AWS region when prompted.
+Enter the access key, secret, and your preferred AWS region when prompted ( this will be stored in `~/.devbox/config.json` locally in your computer).
