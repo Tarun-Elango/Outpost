@@ -16,40 +16,22 @@ Usage: run locally with an AWS access key and secret key (stored locally)
 
 ## Download and Install (from GitHub release)
 
-Every push to `main` publishes Linux and macOS binaries to the [`latest` release](https://github.com/Tarun-Elango/devbox-cli/releases/tag/latest). The snippet below prints your OS and CPU architecture so you can pick the matching release asset and install it as `devbox`:
+Every push to `main` publishes Linux and macOS binaries to the [`latest` release](https://github.com/Tarun-Elango/devbox-cli/releases/tag/latest).
 
 ```bash
-echo "Detected OS: $(uname -s), architecture: $(uname -m)"
-# Linux x86_64  -> devbox-linux-amd64
-# Linux aarch64 -> devbox-linux-arm64
-# Linux arm64   -> devbox-linux-arm64
-# macOS x86_64  -> devbox-darwin-amd64
-# macOS arm64   -> devbox-darwin-arm64
-curl -fsSL "https://github.com/Tarun-Elango/devbox-cli/releases/download/latest/devbox-<linux-or-darwin>-<amd64-or-arm64>" -o /tmp/devbox
-chmod +x /tmp/devbox
-sudo install -m 755 /tmp/devbox /usr/local/bin/devbox
+curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/main/scripts/install.sh | bash
 ```
 
-Verify:
+This detects your OS and CPU, downloads the matching binary, installs it to `~/.local/bin`, and adds that directory to your shell config if needed. Restart your shell, then verify:
 
 ```bash
-which devbox
 devbox ls
 ```
 
-**Without `sudo`** install to `~/.local/bin` instead (add it to your `PATH` if needed):
+To install system-wide (no shell config changes — `/usr/local/bin` is usually already on PATH):
 
 ```bash
-echo "Detected OS: $(uname -s), architecture: $(uname -m)"
-# Linux x86_64  -> devbox-linux-amd64
-# Linux aarch64 -> devbox-linux-arm64
-# Linux arm64   -> devbox-linux-arm64
-# macOS x86_64  -> devbox-darwin-amd64
-# macOS arm64   -> devbox-darwin-arm64
-mkdir -p ~/.local/bin
-curl -fsSL "https://github.com/Tarun-Elango/devbox-cli/releases/download/latest/devbox-<linux-or-darwin>-<amd64-or-arm64>" -o ~/.local/bin/devbox
-chmod +x ~/.local/bin/devbox
-export PATH="$HOME/.local/bin:$PATH"
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/main/scripts/install.sh | sudo bash
 ```
 
 ## Setup
@@ -187,78 +169,27 @@ Run `devbox` with no arguments to print usage, or see the table below.
 
 Credentials and tokens are stored in `~/.devbox/config.json` (mode 0600).
 **Do not sync this folder** — not via dotfiles, iCloud, Dropbox, or Git.
-Use a dedicated low-privilege IAM user for AWS keys.
+Use a dedicated IAM user for AWS keys.
 
 ---
 
 ## AWS setup
 
-Create a dedicated IAM user with only the EC2 permissions devbox needs: create boxes, view them, and delete them.
+Create a dedicated IAM user for devbox.
 
 ### 1. Create an IAM user
 
 1. Open the IAM console → **Users** → **Create user**.
-2. Enter a name (for example `devbox-cli`) and click **Next**.
+2. Enter a name (for example `devbox-cli`).
+3. Choose **Attach policies directly**, search for `AmazonEC2FullAccess`, select it, and create the user.
 
-### 2. Attach a minimal EC2 policy
-
-1. Choose **Attach policies directly** → **Create policy** → **JSON**.
-2. Paste the policy below, then save it (for example as `devbox-ec2-minimal`).
-3. Back on the user-creation screen, refresh the policy list, select `devbox-ec2-minimal`, and finish creating the user.
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "DevboxEC2Create",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:RunInstances",
-        "ec2:CreateTags",
-        "ec2:CreateImage",
-        "ec2:CreateSecurityGroup",
-        "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:StartInstances"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "DevboxEC2View",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:DescribeInstances",
-        "ec2:DescribeImages",
-        "ec2:DescribeVpcs",
-        "ec2:DescribeSubnets",
-        "ec2:DescribeSecurityGroups"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "DevboxEC2Delete",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:TerminateInstances",
-        "ec2:StopInstances",
-        "ec2:DeregisterImage",
-        "ec2:DeleteSnapshot"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-This covers `create`, `ls`, `status`, `delete`, `start`, `stop`, and snapshot commands — nothing broader than required.
-
-### 3. Create access keys
+### 2. Create access keys
 
 1. Open the user → **Security credentials** → **Access keys** → **Create access key**.
-2. Choose **Command Line Interface (CLI)** and confirm.
+2. Choose **Local code** and confirm.
 3. Copy the **Access key ID** and **Secret access key** (the secret is shown only once).
 
-### 4. Save credentials in devbox
+### 3. Save credentials in devbox
 
 ```bash
 devbox setup
