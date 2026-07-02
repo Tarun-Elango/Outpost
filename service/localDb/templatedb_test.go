@@ -77,3 +77,112 @@ func TestUpdateTemplateNamePersistsTrimmedName(t *testing.T) {
 		t.Fatalf("expected startup script preserved, got %q", record.StartupScript.String)
 	}
 }
+
+func TestSearchTemplatesByUserIDMatchesPartialName(t *testing.T) {
+	db := newTestDB(t)
+
+	for _, tmpl := range []struct {
+		id, name string
+	}{
+		{"tmpl-1", "java"},
+		{"tmpl-2", "java25"},
+		{"tmpl-3", "javaOld"},
+		{"tmpl-4", "springWithJava"},
+		{"tmpl-5", "python"},
+	} {
+		if err := db.InsertTemplate(tmpl.id, LocalUserID, tmpl.name, ""); err != nil {
+			t.Fatalf("insert template %s: %v", tmpl.name, err)
+		}
+	}
+
+	records, err := db.SearchTemplatesByUserID(LocalUserID, "java")
+	if err != nil {
+		t.Fatalf("search templates: %v", err)
+	}
+	if len(records) != 4 {
+		t.Fatalf("got %d matches, want 4", len(records))
+	}
+
+	got := make([]string, len(records))
+	for i, r := range records {
+		got[i] = r.Name
+	}
+	want := []string{"java", "java25", "javaOld", "springWithJava"}
+	for i, name := range want {
+		if got[i] != name {
+			t.Fatalf("match %d = %q, want %q (all: %v)", i, got[i], name, got)
+		}
+	}
+}
+
+func TestSearchTemplatesByUserIDIsCaseInsensitive(t *testing.T) {
+	db := newTestDB(t)
+
+	if err := db.InsertTemplate("tmpl-1", LocalUserID, "JavaSDK", ""); err != nil {
+		t.Fatalf("insert template: %v", err)
+	}
+
+	records, err := db.SearchTemplatesByUserID(LocalUserID, "java")
+	if err != nil {
+		t.Fatalf("search templates: %v", err)
+	}
+	if len(records) != 1 || records[0].Name != "JavaSDK" {
+		t.Fatalf("got %#v, want [JavaSDK]", records)
+	}
+}
+
+func TestSeedDefaultTemplates(t *testing.T) {
+	db := newTestDB(t)
+
+	if err := db.seedDefaultTemplates(); err != nil {
+		t.Fatalf("seed default templates: %v", err)
+	}
+
+	records, err := db.ListTemplatesByUserID(LocalUserID)
+	if err != nil {
+		t.Fatalf("list templates: %v", err)
+	}
+	if len(records) != len(defaultTemplates) {
+		t.Fatalf("got %d templates, want %d", len(records), len(defaultTemplates))
+	}
+
+	python, err := db.GetTemplateByNameAndUserID("python", LocalUserID)
+	if err != nil {
+		t.Fatalf("get python template: %v", err)
+	}
+	if !strings.Contains(python.StartupScript.String, "dnf install -y python3") {
+		t.Fatalf("unexpected python script: %q", python.StartupScript.String)
+	}
+	if !python.Description.Valid || python.Description.String == "" {
+		t.Fatal("expected python template description")
+	}
+
+	// Re-seeding must not duplicate or overwrite user-visible rows.
+	if err := db.seedDefaultTemplates(); err != nil {
+		t.Fatalf("re-seed default templates: %v", err)
+	}
+	records, err = db.ListTemplatesByUserID(LocalUserID)
+	if err != nil {
+		t.Fatalf("list templates after re-seed: %v", err)
+	}
+	if len(records) != len(defaultTemplates) {
+		t.Fatalf("after re-seed got %d templates, want %d", len(records), len(defaultTemplates))
+	}
+
+	if err := db.DeleteTemplateByNameAndUserID("python", LocalUserID); err != nil {
+		t.Fatalf("delete python template: %v", err)
+	}
+	if err := db.seedDefaultTemplates(); err != nil {
+		t.Fatalf("seed after delete: %v", err)
+	}
+	if _, err := db.GetTemplateByNameAndUserID("python", LocalUserID); err == nil {
+		t.Fatal("expected deleted python template to stay deleted after re-seed")
+	}
+	records, err = db.ListTemplatesByUserID(LocalUserID)
+	if err != nil {
+		t.Fatalf("list templates after delete and re-seed: %v", err)
+	}
+	if len(records) != len(defaultTemplates)-1 {
+		t.Fatalf("after delete and re-seed got %d templates, want %d", len(records), len(defaultTemplates)-1)
+	}
+}

@@ -68,6 +68,7 @@ Commands:
   template new <name> [command string]  Create a template with optional startup command
   template delete <name>                Delete a template
   template rename <name> <new-name>     Rename a template
+  template search <query>               Search templates by name ( returns partial matches )
 
   idle-stop set <id|name> <minutes>     Stop the box after inactivity
   idle-stop show <id|name>              Show idle-stop settings for a box

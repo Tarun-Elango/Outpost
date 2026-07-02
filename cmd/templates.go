@@ -31,12 +31,54 @@ func TemplateList(args []string) {
 	fmt.Printf("%-20s%s%s\n", "TEMPLATE", colSep, "STARTUP SCRIPT")
 	fmt.Println(strings.Repeat("-", 60))
 	for _, t := range templates {
-		ref := t.ID
-		if ref == "" {
-			ref = t.Name
-		}
-		fmt.Printf("%-20s%s%s\n", ref, colSep, formatTemplateScript(t.StartupScript))
+		printTemplateRow(t, colSep)
 	}
+}
+
+const templateSearchUsageLine = "usage: devbox template search <query>"
+
+// TemplateSearch lists templates whose name contains the query string.
+func TemplateSearch(args []string) { // args should be a string of the query
+	query := strings.TrimSpace(strings.Join(args, " "))
+	if query == "" {
+		fmt.Fprintln(os.Stderr, "error: search query is required")
+		fmt.Fprintln(os.Stderr, templateSearchUsageLine)
+		os.Exit(1)
+	}
+	if strings.HasPrefix(query, "--") {
+		fmt.Fprintf(os.Stderr, "error: unknown flag %q\n", query)
+		os.Exit(1)
+	}
+
+	rt := helper.MustOpenRuntime()
+	defer func() { _ = rt.Close() }()
+	templates, err := rt.SearchTemplates(service.LocalUserID, query)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(templates) == 0 {
+		fmt.Printf("No templates matching %q.\n", query)
+		return
+	}
+
+	// print the templates matching the query
+	const colSep = "  |  "
+	fmt.Printf("Templates matching %q:\n", query)
+	fmt.Printf("%-20s%s%s\n", "TEMPLATE", colSep, "STARTUP SCRIPT")
+	fmt.Println(strings.Repeat("-", 60))
+	for _, t := range templates {
+		printTemplateRow(t, colSep)
+	}
+}
+
+func printTemplateRow(t *service.Template, colSep string) {
+	ref := t.ID
+	if ref == "" {
+		ref = t.Name
+	}
+	fmt.Printf("%-20s%s%s\n", ref, colSep, formatTemplateScript(t.StartupScript))
 }
 
 func formatTemplateScript(s string) string {
