@@ -64,7 +64,7 @@ func CreateTemplate(args []string) {
 	templateRefs, name, fromSnapshot, err := helper.ParseCreateTemplateArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: devbox create --template <template> [<template>...] <name> [--from <snapshot_ami_id>]")
+		fmt.Fprintln(os.Stderr, "usage: devbox create --template <template> [<template>...] <name> [--from <amiId|name>]")
 		os.Exit(1)
 	}
 
@@ -109,6 +109,14 @@ func CreateTemplate(args []string) {
 
 	rt := helper.MustOpenRuntime()
 	defer func() { _ = rt.Close() }()
+	if fromSnapshot != "" {
+		snapshotTarget, err := helper.ResolveSnapshotTarget(rt, fromSnapshot) // resolve the snapshot target from the ami id or name
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fromSnapshot = snapshotTarget.AmiID
+	}
 	inst, err := rt.CreateBoxFromTemplates(name, templateRefs, pubKey, fromSnapshot, service.LocalUserID, instanceType, volumeSizeGB)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

@@ -21,9 +21,9 @@ Commands:
   clear-creds         Clear saved AWS credentials from ~/.devbox/config.json
   health              Check config, AWS credentials, region, and database
 
-  create <name> [--from <snapshot_ami_id>]
+  create <name> [--from <amiId|name>]
                       Create a new box (optionally restore from a snapshot)
-  create --template <template> [<template>...] <name> [--from <snapshot_ami_id>]
+  create --template <template> [<template>...] <name> [--from <amiId|name>]
                       Create a box from one or more templates (optionally from snapshot)
 
   ls                  List all boxes
@@ -61,8 +61,8 @@ Commands:
 
   snapshot                              List all snapshots
   snapshot create <id|name> <name>      Create a snapshot of a box
-  snapshot ls <amiId>                   Show details for a snapshot
-  snapshot delete <amiId>               Delete a snapshot
+  snapshot ls <amiId|name>              Show details for a snapshot
+  snapshot delete <amiId|name>          Delete a snapshot
 
   template                              List available templates
   template new <name> [command string]  Create a template with optional startup command

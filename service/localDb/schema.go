@@ -30,6 +30,7 @@ var createTables = []string{
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`,
 	`CREATE INDEX IF NOT EXISTS idx_snapshots_box ON snapshots(box_id)`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS idx_snapshots_name_user ON snapshots(user_id, name)`,
 	`CREATE TABLE IF NOT EXISTS templates (
   id              TEXT PRIMARY KEY,
   user_id         TEXT NOT NULL REFERENCES users(id),
