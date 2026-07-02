@@ -2,7 +2,7 @@
 
 Manage remote dev boxes from the CLI — provision, connect, or destroy them.  
 Support: linux, macos  
-Infrastructure: AWS EC2  
+Requirements: Aws account, linux or macos
 Usage: run locally with an AWS access key and secret key (stored locally)
 
 ## Table of Contents
@@ -195,4 +195,4 @@ Create a dedicated IAM user for devbox.
 devbox setup
 ```
 
-Enter the access key, secret, and your preferred AWS region when prompted.
+Enter the access key, secret, and your preferred AWS region when prompted ( this will be stored in `~/.devbox/config.json` locally in your computer).
