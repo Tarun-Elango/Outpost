@@ -4,8 +4,12 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - 'docs/**'
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'helper/**'
+      - 'scripts/**'
+      - 'service/**'
 
 permissions:
   contents: read

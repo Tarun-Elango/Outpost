@@ -1,9 +1,22 @@
 # devbox-cli
 
-Manage remote dev boxes from the CLI — provision, connect, or destroy them.  
-Support: linux, macos  
-Requirements: Aws account, linux or macos
-Usage: run locally with an AWS access key and secret key (stored locally)
+Manage remote dev boxes from the CLI — provision, connect, or destroy them.
+
+- **Requirements:** AWS account, Linux or macOS
+- **Usage:** run cli tool locally with an AWS access key and secret key (stored locally)
+
+## What is a box?
+
+A **box** is a personal dev machine on AWS — an EC2 instance running Amazon Linux that you provision, connect to, and tear down from your laptop.
+
+## Why use devbox?
+
+- **Dedicated dev machine on the cloud** — your own EC2 instance, separate from production and your daily driver
+- **Smaller blast radius** — experiments, tooling, and dependencies stay off your main machine
+- **Fast lifecycle** — create, use, and tear down boxes in minutes
+- **Reproducible setups** — spin up consistent environments from templates
+- **Commands that simplify daily work** — ssh, sync, idle-stop, git-sync, and more
+- **Secure by default** — AWS credentials and config stored locally on your machine
 
 ## Table of Contents
 - [Download and Install (from GitHub release)](#download-and-install-from-github-release)
@@ -33,10 +46,12 @@ Verify with `devbox ls`.
 
 ## Setup
 
-Run the interactive setup wizard to configure AWS credentials and local config:
+Run the interactive setup wizard to configure AWS credentials and local config, then create and connect to your first box:
 
 ```bash
 devbox setup
+devbox create mybox
+devbox ssh mybox
 ```
 
 Credentials are stored locally in your home directory.
@@ -136,6 +151,8 @@ Run `devbox` with no arguments to print usage, or see the table below.
 
 ### Snapshots
 
+A snapshot is a saved disk image of a box; restore one with `create --from`.
+
 | Command | Notes |
 | --- | --- |
 | `snapshot` | List all snapshots |
@@ -144,6 +161,8 @@ Run `devbox` with no arguments to print usage, or see the table below.
 | `snapshot delete <amiId-or-name>` | Delete a snapshot |
 
 ### Templates
+
+Templates let you create boxes preloaded with libs, tools, and other setup.
 
 | Command | Notes |
 | --- | --- |
@@ -161,6 +180,14 @@ Run `devbox` with no arguments to print usage, or see the table below.
 | `idle-stop show <id-or-name>` | Show idle-stop settings for a box |
 | `idle-stop update <id-or-name> <minutes>` | Update idle-stop timeout |
 | `idle-stop delete <id-or-name>` | Remove idle-stop from a box |
+
+### Git sync
+
+Toggle GitHub SSH access for a box: adds your local SSH key to `ssh-agent` and enables agent forwarding (`-A`) in the box's SSH config. Run again to undo both.
+
+| Command | Notes |
+| --- | --- |
+| `git-sync <id-or-name>` | Toggle GitHub SSH agent forwarding for a box |
 
 ## Notes on local config (`~/.devbox`)
 
