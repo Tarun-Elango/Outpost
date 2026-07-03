@@ -22,10 +22,10 @@ Every push to `main` publishes Linux and macOS binaries to the [`latest` release
 curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh | bash
 ```
 
-Dont want to install the latest version? Pin a version with `RELEASE_TAG`, or install system-wide to `/usr/local/bin` (requires `sudo`, no shell config changes):
+Don't want to install the latest version? Pin a version with `RELEASE_TAG`, or install system-wide to `/usr/local/bin` (requires `sudo`, no shell config changes):
 
 ```bash
-RELEASE_TAG=v0.6.0 curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh | bash
+RELEASE_TAG=v0.7.0 curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh | bash
 INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh | sudo bash
 ```
 

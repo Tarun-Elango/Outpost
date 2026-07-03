@@ -138,7 +138,7 @@ func hostInBlock(block hostBlock, name string) bool {
 	return false
 }
 
-func devboxHostName(name string) string {
+func DevboxHostName(name string) string {
 	return "devbox-" + name
 }
 
@@ -190,7 +190,7 @@ func AddHost(name, ipAddress string) error {
 	if err := validateSSHIPAddress(ipAddress); err != nil {
 		return err
 	}
-	host := devboxHostName(name)
+	host := DevboxHostName(name)
 	return updateSSHConfig(func(content string) (string, error) {
 		if _, found := findBlockByHost(content, host); found { // check if the host already exists
 			return "", fmt.Errorf("host %q already exists", host)
@@ -211,7 +211,7 @@ func UpdateHost(name, ipAddress string) error {
 	if err := validateSSHIPAddress(ipAddress); err != nil {
 		return err
 	}
-	host := devboxHostName(name)
+	host := DevboxHostName(name)
 	return updateSSHConfig(func(content string) (string, error) {
 		block, found := findBlockByHost(content, host)
 		if !found {
@@ -253,8 +253,8 @@ func RenameHost(oldName, newName string) error {
 	if err := validateSSHBoxName(newName); err != nil {
 		return err
 	}
-	oldHost := devboxHostName(oldName)
-	newHost := devboxHostName(newName)
+	oldHost := DevboxHostName(oldName)
+	newHost := DevboxHostName(newName)
 	if oldHost == newHost {
 		return nil
 	}
@@ -384,9 +384,9 @@ func ForwardAgentEnabled(name string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	block, found := findBlockByHost(content, devboxHostName(name))
+	block, found := findBlockByHost(content, DevboxHostName(name))
 	if !found {
-		return false, sshHostNotFound(devboxHostName(name))
+		return false, sshHostNotFound(DevboxHostName(name))
 	}
 	lines, _ := sshConfigLines(content)
 	return forwardAgentEnabledInBlock(lines[block.start:block.end]), nil
@@ -397,7 +397,7 @@ func EnableForwardAgent(name string) error {
 	if err := validateSSHBoxName(name); err != nil {
 		return err
 	}
-	host := devboxHostName(name)
+	host := DevboxHostName(name)
 	return updateSSHConfigWithRetry(func(content string) (string, error) {
 		block, found := findBlockByHost(content, host)
 		if !found {
@@ -420,7 +420,7 @@ func DisableForwardAgent(name string) error {
 	if err := validateSSHBoxName(name); err != nil {
 		return err
 	}
-	host := devboxHostName(name)
+	host := DevboxHostName(name)
 	return updateSSHConfigWithRetry(func(content string) (string, error) {
 		block, found := findBlockByHost(content, host)
 		if !found {
@@ -444,7 +444,7 @@ func DeleteHost(name string) error {
 	if err := validateSSHBoxName(name); err != nil {
 		return err
 	}
-	host := devboxHostName(name)
+	host := DevboxHostName(name)
 	return updateSSHConfig(func(content string) (string, error) {
 		block, found := findBlockByHost(content, host)
 		if !found {

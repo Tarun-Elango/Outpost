@@ -46,7 +46,7 @@ func GitSync(args []string) {
 	}
 
 	synced := configEnabled && keyLoaded
-	hostAlias := "devbox-" + target.Name
+	hostAlias := service.DevboxHostName(target.Name)
 
 	if synced { // if both are true, disable both
 		if err := service.DisableForwardAgent(target.Name); err != nil {
