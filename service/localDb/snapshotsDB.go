@@ -138,10 +138,9 @@ func (db *DB) ResolveSnapshotByAmiIDOrName(ref, userID string) (*SnapshotRecord,
 		return nil, fmt.Errorf("snapshot ami id or name is required")
 	}
 
-	lookupAmiID := ref
 	if snapshotAmiIDPattern.MatchString(strings.ToLower(ref)) {
 		// check if the ref is an ami id
-		lookupAmiID = strings.ToLower(ref)
+		lookupAmiID := strings.ToLower(ref)
 		byAmi, amiErr := db.GetSnapshotByAmiIDAndUserID(lookupAmiID, userID)
 		if amiErr == nil {
 			return byAmi, nil

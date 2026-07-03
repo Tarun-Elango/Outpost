@@ -38,18 +38,25 @@ func TemplateList(args []string) {
 func buildTemplateListOutput(templates []*service.Template) string {
 	var b strings.Builder
 	b.WriteString("Listing local templates\n")
-	writeTemplateTable(&b, templates)
+	_ = writeTemplateTable(&b, templates) // strings.Builder writes never fail
 	return b.String()
 }
 
 // writeTemplateTable: creates header and separator
-func writeTemplateTable(w io.Writer, templates []*service.Template) {
+func writeTemplateTable(w io.Writer, templates []*service.Template) error {
 	const colSep = "  |  "
-	fmt.Fprintf(w, "%-20s%s%s\n", "TEMPLATE", colSep, "STARTUP SCRIPT")
-	fmt.Fprintln(w, strings.Repeat("-", 60))
-	for _, t := range templates {
-		writeTemplateRow(w, t, colSep) // one row per template
+	if _, err := fmt.Fprintf(w, "%-20s%s%s\n", "TEMPLATE", colSep, "STARTUP SCRIPT"); err != nil {
+		return err
 	}
+	if _, err := fmt.Fprintln(w, strings.Repeat("-", 60)); err != nil {
+		return err
+	}
+	for _, t := range templates {
+		if err := writeTemplateRow(w, t, colSep); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 const templateSearchUsageLine = "usage: devbox template search <query>"
@@ -81,16 +88,20 @@ func TemplateSearch(args []string) { // args should be a string of the query
 	}
 
 	fmt.Printf("Templates matching %q:\n", query)
-	writeTemplateTable(os.Stdout, templates)
+	if err := writeTemplateTable(os.Stdout, templates); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 // writeTemplateRow: writes one row per template
-func writeTemplateRow(w io.Writer, t *service.Template, colSep string) {
+func writeTemplateRow(w io.Writer, t *service.Template, colSep string) error {
 	ref := t.ID
 	if ref == "" {
 		ref = t.Name
 	}
-	fmt.Fprintf(w, "%-20s%s%s\n", ref, colSep, formatTemplateScript(t.StartupScript))
+	_, err := fmt.Fprintf(w, "%-20s%s%s\n", ref, colSep, formatTemplateScript(t.StartupScript))
+	return err
 }
 
 func formatTemplateScript(s string) string {
