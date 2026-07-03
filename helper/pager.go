@@ -1,11 +1,13 @@
 package helper
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 )
 
 // WriteStdoutMaybePaged prints content to stdout, piping through $PAGER when stdout
@@ -42,10 +44,29 @@ func pageContent(content string) error {
 	cmd.Stdin = strings.NewReader(content)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		// if the pager command fails, write the content to stdout
+		_, writeErr := io.WriteString(os.Stdout, content)
+		return writeErr
+	}
+
+	// if the pager command fails oddly, write the content to stdout
+	if err := cmd.Wait(); err != nil && !isBenignPagerError(err) {
 		return fmt.Errorf("pager: %w", err)
 	}
 	return nil
+}
+
+func isBenignPagerError(err error) bool { // if harmless - ok to ignore
+
+	if errors.Is(err, syscall.EPIPE) || errors.Is(err, io.ErrClosedPipe) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "broken pipe") {
+		return true
+	}
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr)
 }
 
 func pagerCommand() (string, []string) {

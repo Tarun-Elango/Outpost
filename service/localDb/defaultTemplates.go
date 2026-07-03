@@ -270,6 +270,28 @@ func (db *DB) seedDefaultTemplates() error {
 			continue
 		}
 
+		existing, err := db.GetTemplateByNameAndUserID(tmpl.Name, LocalUserID)
+		if err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("check existing template %s: %w", tmpl.Name, err)
+		}
+		if err == nil {
+			if existing.ID != tmpl.ID {
+				// User-owned template already uses this name; skip offering the built-in.
+				if err := db.recordDefaultTemplateSeed(tmpl.ID); err != nil {
+					return fmt.Errorf("record seed for %s: %w", tmpl.Name, err)
+				}
+				continue
+			}
+			// Built-in row exists but seed metadata is missing.
+			if err := db.recordDefaultTemplateSeed(tmpl.ID); err != nil {
+				return fmt.Errorf("record seed for %s: %w", tmpl.Name, err)
+			}
+			if err := db.syncDefaultTemplate(tmpl); err != nil {
+				return fmt.Errorf("sync template %s: %w", tmpl.Name, err)
+			}
+			continue
+		}
+
 		tx, err := db.conn.Begin()
 		if err != nil {
 			return fmt.Errorf("seed template %s: %w", tmpl.Name, err)
@@ -306,8 +328,8 @@ func (db *DB) seedDefaultTemplates() error {
 	return nil
 }
 
-// syncDefaultTemplate updates name, description, and startup_script when the built-in row
-// still exists. User-deleted templates are left deleted.
+// syncDefaultTemplate updates description and startup_script when the built-in row
+// still exists. User renames and user-deleted templates are left unchanged.
 func (db *DB) syncDefaultTemplate(tmpl defaultTemplate) error {
 	record, err := db.GetTemplateByID(tmpl.ID)
 	if err == sql.ErrNoRows {
@@ -322,17 +344,15 @@ func (db *DB) syncDefaultTemplate(tmpl defaultTemplate) error {
 
 	wantDescription := tmpl.Description
 	wantScript := tmpl.Script
-	if record.Name == tmpl.Name &&
-		nullStringValue(record.Description) == wantDescription &&
+	if nullStringValue(record.Description) == wantDescription &&
 		nullStringValue(record.StartupScript) == wantScript {
 		return nil
 	}
 
 	_, err = db.conn.Exec(`
 		UPDATE templates
-		SET name = ?, description = ?, startup_script = ?
+		SET description = ?, startup_script = ?
 		WHERE id = ? AND user_id = ?`,
-		tmpl.Name,
 		nullIfEmpty(wantDescription),
 		nullIfEmpty(wantScript),
 		tmpl.ID,
@@ -340,6 +360,17 @@ func (db *DB) syncDefaultTemplate(tmpl defaultTemplate) error {
 	)
 	if err != nil {
 		return fmt.Errorf("update template content: %w", err)
+	}
+	return nil
+}
+
+func (db *DB) recordDefaultTemplateSeed(templateID string) error {
+	_, err := db.conn.Exec(
+		`INSERT OR IGNORE INTO default_template_seeds (template_id) VALUES (?)`,
+		templateID,
+	)
+	if err != nil {
+		return err
 	}
 	return nil
 }

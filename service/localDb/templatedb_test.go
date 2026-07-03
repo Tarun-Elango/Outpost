@@ -187,6 +187,81 @@ func TestSeedDefaultTemplates(t *testing.T) {
 	}
 }
 
+func TestSeedDefaultTemplatesSkipsUserNameCollision(t *testing.T) {
+	db := newTestDB(t)
+
+	if err := db.InsertTemplate("user-python3", LocalUserID, "python3", "echo user"); err != nil {
+		t.Fatalf("insert user template: %v", err)
+	}
+
+	if err := db.seedDefaultTemplates(); err != nil {
+		t.Fatalf("seed default templates: %v", err)
+	}
+
+	userTmpl, err := db.GetTemplateByNameAndUserID("python3", LocalUserID)
+	if err != nil {
+		t.Fatalf("get user python3 template: %v", err)
+	}
+	if userTmpl.ID != "user-python3" {
+		t.Fatalf("expected user template preserved, got id %q", userTmpl.ID)
+	}
+	if userTmpl.StartupScript.String != "echo user" {
+		t.Fatalf("expected user script preserved, got %q", userTmpl.StartupScript.String)
+	}
+
+	records, err := db.ListTemplatesByUserID(LocalUserID)
+	if err != nil {
+		t.Fatalf("list templates: %v", err)
+	}
+	if len(records) != len(defaultTemplates) {
+		t.Fatalf("got %d templates, want %d (built-in python3 skipped)", len(records), len(defaultTemplates))
+	}
+
+	seeded, err := db.defaultTemplateAlreadySeeded("00000000-0000-0000-0001-000000000001")
+	if err != nil {
+		t.Fatalf("check python3 seed state: %v", err)
+	}
+	if !seeded {
+		t.Fatal("expected python3 built-in marked seeded after name collision")
+	}
+
+	if err := db.seedDefaultTemplates(); err != nil {
+		t.Fatalf("re-seed default templates: %v", err)
+	}
+	userTmpl, err = db.GetTemplateByNameAndUserID("python3", LocalUserID)
+	if err != nil {
+		t.Fatalf("get user python3 template after re-seed: %v", err)
+	}
+	if userTmpl.ID != "user-python3" {
+		t.Fatalf("expected user template preserved after re-seed, got id %q", userTmpl.ID)
+	}
+}
+
+func TestSeedDefaultTemplatesPreservesUserRename(t *testing.T) {
+	db := newTestDB(t)
+
+	if err := db.seedDefaultTemplates(); err != nil {
+		t.Fatalf("seed default templates: %v", err)
+	}
+
+	pythonID := "00000000-0000-0000-0001-000000000001"
+	if err := db.UpdateTemplateName("python3", LocalUserID, "my-python"); err != nil {
+		t.Fatalf("rename python3 template: %v", err)
+	}
+
+	if err := db.seedDefaultTemplates(); err != nil {
+		t.Fatalf("re-seed default templates: %v", err)
+	}
+
+	record, err := db.GetTemplateByID(pythonID)
+	if err != nil {
+		t.Fatalf("get renamed template: %v", err)
+	}
+	if record.Name != "my-python" {
+		t.Fatalf("expected renamed name preserved, got %q", record.Name)
+	}
+}
+
 func TestSeedDefaultTemplatesSyncsScriptUpdates(t *testing.T) {
 	db := newTestDB(t)
 
