@@ -60,13 +60,13 @@ func runAndCaptureStdout(t *testing.T, fn func() error) (string, error) {
 	go func() {
 		var b strings.Builder
 		_, copyErr := io.Copy(&b, r)
-		r.Close()
+		_ = r.Close()
 		outCh <- b.String()
 		errCh <- copyErr
 	}()
 
 	fnErr := fn()
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	if copyErr := <-errCh; copyErr != nil {
