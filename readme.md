@@ -19,22 +19,17 @@ Usage: run locally with an AWS access key and secret key (stored locally)
 Every push to `main` publishes Linux and macOS binaries to the [`latest` release](https://github.com/Tarun-Elango/devbox-cli/releases/tag/latest).
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh | bash
 ```
 
-This detects your OS and CPU, downloads the matching binary, installs it to `~/.local/bin`, and adds that directory to your shell config if needed. Restart your shell, then verify:
+Dont want to install the latest version? Pin a version with `RELEASE_TAG`, or install system-wide to `/usr/local/bin` (requires `sudo`, no shell config changes):
 
 ```bash
-devbox ls
+RELEASE_TAG=v0.6.0 curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh | bash
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh | sudo bash
 ```
 
-To install system-wide (no shell config changes — `/usr/local/bin` is usually already on PATH):
-
-Same script as above, but installs to `/usr/local/bin` for all users on the machine; requires `sudo`, and skips editing your shell config.
-
-```bash
-INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/main/scripts/install.sh | sudo bash
-```
+Verify with `devbox ls`.
 
 ## Setup
 

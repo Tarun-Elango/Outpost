@@ -17,8 +17,10 @@ import (
 )
 
 const (
-	updateTagsURL       = "https://api.github.com/repos/Tarun-Elango/devbox-cli/tags"
-	updateInstallScript = "https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/main/scripts/install.sh"
+	updateTagsURL = "https://api.github.com/repos/Tarun-Elango/devbox-cli/tags"
+	// Pinned to the "latest" release tag (not the mutable main branch) so
+	// the fetched script always matches a published release.
+	updateInstallScript = "https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh"
 )
 
 var (

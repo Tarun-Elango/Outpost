@@ -1,12 +1,19 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+var errSSHHostNotFound = errors.New("ssh host not found")
+
+func sshHostNotFound(host string) error {
+	return fmt.Errorf("host %q does not exist: %w", host, errSSHHostNotFound)
+}
 
 const sshConfigUpdateAttempts = 3
 
@@ -76,8 +83,28 @@ type hostBlock struct {
 	hosts []string
 }
 
+func sshConfigLines(content string) (lines []string, hadTrailingNewline bool) {
+	if content == "" {
+		return nil, false
+	}
+	hadTrailingNewline = strings.HasSuffix(content, "\n")
+	lines = strings.Split(content, "\n")
+	if hadTrailingNewline && len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines, hadTrailingNewline
+}
+
+func formatSSHConfig(lines []string, hadTrailingNewline bool) string {
+	result := strings.Join(lines, "\n")
+	if hadTrailingNewline {
+		result += "\n"
+	}
+	return result
+}
+
 func parseHostBlocks(content string) []hostBlock {
-	lines := strings.Split(content, "\n")
+	lines, _ := sshConfigLines(content)
 	var blocks []hostBlock
 	var current *hostBlock
 
@@ -188,24 +215,24 @@ func UpdateHost(name, ipAddress string) error {
 	return updateSSHConfig(func(content string) (string, error) {
 		block, found := findBlockByHost(content, host)
 		if !found {
-			return "", fmt.Errorf("host %q does not exist", host)
+			return "", sshHostNotFound(host)
 		}
 
-		lines := strings.Split(content, "\n")      // the entire ssh config file as a list of lines
-		blockLines := lines[block.start:block.end] // get the lines in the block
+		lines, trailing := sshConfigLines(content)
+		blockLines := lines[block.start:block.end]
 
 		hostnameUpdated := false
 		for i, line := range blockLines {
 			trimmed := strings.TrimSpace(line)
 			if strings.HasPrefix(strings.ToLower(trimmed), "hostname ") {
-				indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))] // get the indent of the line
-				blockLines[i] = indent + "HostName " + ipAddress              // update the block line i with the new ip address
+				indent := lineIndent(line)
+				blockLines[i] = indent + "HostName " + ipAddress
 				hostnameUpdated = true
 				break
 			}
 		}
 		if !hostnameUpdated {
-			insert := "    HostName " + ipAddress
+			insert := blockOptionIndent(blockLines) + "HostName " + ipAddress
 			updatedBlock := make([]string, 0, len(blockLines)+1)
 			updatedBlock = append(updatedBlock, blockLines[0])
 			updatedBlock = append(updatedBlock, insert)
@@ -213,8 +240,8 @@ func UpdateHost(name, ipAddress string) error {
 			blockLines = updatedBlock
 		}
 
-		newLines := append(lines[:block.start], append(blockLines, lines[block.end:]...)...) //[ everything before the host block ] + [ the updated block ] + [ everything after the host block ]
-		return strings.Join(newLines, "\n"), nil
+		newLines := append(lines[:block.start], append(blockLines, lines[block.end:]...)...)
+		return formatSSHConfig(newLines, trailing), nil
 	})
 }
 
@@ -235,13 +262,13 @@ func RenameHost(oldName, newName string) error {
 	return updateSSHConfigWithRetry(func(content string) (string, error) {
 		block, found := findBlockByHost(content, oldHost)
 		if !found {
-			return "", fmt.Errorf("host %q does not exist", oldHost)
+			return "", sshHostNotFound(oldHost)
 		}
 		if _, found := findBlockByHost(content, newHost); found {
 			return "", fmt.Errorf("host %q already exists", newHost)
 		}
 
-		lines := strings.Split(content, "\n")
+		lines, trailing := sshConfigLines(content)
 		blockLines := lines[block.start:block.end]
 		if len(blockLines) == 0 {
 			return "", fmt.Errorf("host %q block is empty", oldHost)
@@ -254,11 +281,10 @@ func RenameHost(oldName, newName string) error {
 				break
 			}
 		}
-		indent := blockLines[0][:len(blockLines[0])-len(strings.TrimLeft(blockLines[0], " \t"))]
-		blockLines[0] = indent + "Host " + strings.Join(hosts, " ")
+		blockLines[0] = lineIndent(blockLines[0]) + "Host " + strings.Join(hosts, " ")
 
 		newLines := append(lines[:block.start], append(blockLines, lines[block.end:]...)...)
-		return strings.Join(newLines, "\n"), nil
+		return formatSSHConfig(newLines, trailing), nil
 	})
 }
 
@@ -268,7 +294,7 @@ func syncSSHHostIP(name, ipAddress string) error {
 		return nil
 	}
 	if err := UpdateHost(name, ipAddress); err != nil {
-		if !strings.Contains(err.Error(), "does not exist") {
+		if !errors.Is(err, errSSHHostNotFound) {
 			return err
 		}
 		return AddHost(name, ipAddress)
@@ -276,8 +302,148 @@ func syncSSHHostIP(name, ipAddress string) error {
 	return nil
 }
 
+const forwardAgentOption = "ForwardAgent yes"
+
+func isForwardAgentLine(line string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), "forwardagent")
+}
+
+// forwardAgentEnabledInBlock reports whether the first ForwardAgent directive
+// in blockLines enables agent forwarding. OpenSSH uses the first match.
+func forwardAgentEnabledInBlock(blockLines []string) bool {
+	for _, line := range blockLines {
+		if !isForwardAgentLine(line) {
+			continue
+		}
+		parts := strings.Fields(strings.TrimSpace(line))
+		if len(parts) >= 2 {
+			return strings.EqualFold(parts[1], "yes")
+		}
+		return false
+	}
+	return false
+}
+
+func countForwardAgentLines(blockLines []string) int {
+	n := 0
+	for _, line := range blockLines {
+		if isForwardAgentLine(line) {
+			n++
+		}
+	}
+	return n
+}
+
+func removeForwardAgentLines(blockLines []string) []string {
+	updated := make([]string, 0, len(blockLines))
+	for _, line := range blockLines {
+		if !isForwardAgentLine(line) {
+			updated = append(updated, line)
+		}
+	}
+	return updated
+}
+
+func lineIndent(line string) string {
+	return line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+}
+
+// blockOptionIndent returns the indentation used by a block's existing
+// options, falling back to a 4-space default for blocks with none.
+func blockOptionIndent(blockLines []string) string {
+	for _, line := range blockLines {
+		if trimmed := strings.TrimSpace(line); trimmed != "" && !strings.HasPrefix(strings.ToLower(trimmed), "host ") {
+			return lineIndent(line)
+		}
+	}
+	return "    "
+}
+
+// appendBlockOption inserts option as the last option in the block, i.e.
+// after the last non-blank line but before any trailing blank separator
+// lines that belong to the block.
+func appendBlockOption(blockLines []string, option string) []string {
+	end := len(blockLines)
+	for end > 0 && strings.TrimSpace(blockLines[end-1]) == "" {
+		end--
+	}
+	updated := make([]string, 0, len(blockLines)+1)
+	updated = append(updated, blockLines[:end]...)
+	updated = append(updated, blockOptionIndent(blockLines)+option)
+	updated = append(updated, blockLines[end:]...)
+	return updated
+}
+
+// ForwardAgentEnabled reports whether ForwardAgent yes is set for a devbox host.
+// read ssh config, get block , and check if ForwardAgent yes is set
+func ForwardAgentEnabled(name string) (bool, error) {
+	if err := validateSSHBoxName(name); err != nil {
+		return false, err
+	}
+	content, err := readSSHConfig()
+	if err != nil {
+		return false, err
+	}
+	block, found := findBlockByHost(content, devboxHostName(name))
+	if !found {
+		return false, sshHostNotFound(devboxHostName(name))
+	}
+	lines, _ := sshConfigLines(content)
+	return forwardAgentEnabledInBlock(lines[block.start:block.end]), nil
+}
+
+// EnableForwardAgent adds ForwardAgent yes to a devbox host block when missing.
+func EnableForwardAgent(name string) error {
+	if err := validateSSHBoxName(name); err != nil {
+		return err
+	}
+	host := devboxHostName(name)
+	return updateSSHConfigWithRetry(func(content string) (string, error) {
+		block, found := findBlockByHost(content, host)
+		if !found {
+			return "", sshHostNotFound(host)
+		}
+
+		lines, trailing := sshConfigLines(content)
+		blockLines := lines[block.start:block.end]
+		if forwardAgentEnabledInBlock(blockLines) && countForwardAgentLines(blockLines) == 1 {
+			return content, nil
+		}
+		updatedBlock := appendBlockOption(removeForwardAgentLines(blockLines), forwardAgentOption)
+		newLines := append(lines[:block.start], append(updatedBlock, lines[block.end:]...)...)
+		return formatSSHConfig(newLines, trailing), nil
+	})
+}
+
+// DisableForwardAgent removes ForwardAgent yes from a devbox host block when present.
+func DisableForwardAgent(name string) error {
+	if err := validateSSHBoxName(name); err != nil {
+		return err
+	}
+	host := devboxHostName(name)
+	return updateSSHConfigWithRetry(func(content string) (string, error) {
+		block, found := findBlockByHost(content, host)
+		if !found {
+			return "", sshHostNotFound(host)
+		}
+
+		lines, trailing := sshConfigLines(content)
+		blockLines := lines[block.start:block.end]
+		if countForwardAgentLines(blockLines) == 0 {
+			return content, nil
+		}
+
+		updatedBlock := removeForwardAgentLines(blockLines)
+		newLines := append(lines[:block.start], append(updatedBlock, lines[block.end:]...)...)
+		return formatSSHConfig(newLines, trailing), nil
+	})
+}
+
 // delete host (name)
 func DeleteHost(name string) error {
+	if err := validateSSHBoxName(name); err != nil {
+		return err
+	}
 	host := devboxHostName(name)
 	return updateSSHConfig(func(content string) (string, error) {
 		block, found := findBlockByHost(content, host)
@@ -285,8 +451,8 @@ func DeleteHost(name string) error {
 			return content, nil // if the host does not exist, do nothing
 		}
 
-		lines := strings.Split(content, "\n")                         // the entire ssh config file as a list of lines
-		newLines := append(lines[:block.start], lines[block.end:]...) // [ everything before the host block ] + [ everything after the host block ]
-		return strings.Join(newLines, "\n"), nil
+		lines, trailing := sshConfigLines(content)
+		newLines := append(lines[:block.start], lines[block.end:]...)
+		return formatSSHConfig(newLines, trailing), nil
 	})
 }

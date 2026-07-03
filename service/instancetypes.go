@@ -3,7 +3,7 @@ package service
 import "fmt"
 
 // DefaultInstanceType is the instance type used when no interactive picker is shown.
-const DefaultInstanceType = "t4g.small"
+const DefaultInstanceType = "t4g.medium"
 
 // InstanceType is an EC2 instance type with a human-readable vCPU/RAM label.
 type InstanceType struct {
