@@ -15,8 +15,8 @@ A **box** is a personal dev machine on AWS — an EC2 instance running Amazon Li
 - **Smaller blast radius** — experiments, tooling, and dependencies stay off your main machine
 - **Fast lifecycle** — create, use, and tear down boxes in minutes
 - **Reproducible setups** — spin up consistent environments from templates
-- **Commands that simplify daily work** — ssh, sync, idle-stop, git-sync, and more
-- **Secure by default** — AWS credentials and config stored locally on your machine
+- **Build in commands for common tasks** — ssh, sync, idle-stop, git-sync
+- **Secure** — AWS credentials and config stored locally on your machine
 
 ## Table of Contents
 - [Download and Install (from GitHub release)](#download-and-install-from-github-release)
