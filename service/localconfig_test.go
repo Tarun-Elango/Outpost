@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -69,6 +70,204 @@ func TestRenameHostRejectsExistingTarget(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `host "devbox-beta" already exists`) {
 		t.Fatalf("unexpected duplicate host error: %v", err)
+	}
+}
+
+func TestEnableDisableForwardAgent(t *testing.T) {
+	path := writeTestSSHConfig(t, "Host devbox-alpha\n    HostName 10.0.0.1\n    User ec2-user\n\nHost devbox-beta\n    HostName 10.0.0.2\n")
+
+	enabled, err := ForwardAgentEnabled("alpha")
+	if err != nil {
+		t.Fatalf("read forward agent: %v", err)
+	}
+	if enabled {
+		t.Fatal("expected ForwardAgent to be disabled initially")
+	}
+
+	if err := EnableForwardAgent("alpha"); err != nil {
+		t.Fatalf("enable forward agent: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	want := "Host devbox-alpha\n    HostName 10.0.0.1\n    User ec2-user\n    ForwardAgent yes\n\nHost devbox-beta\n    HostName 10.0.0.2\n"
+	if string(data) != want {
+		t.Fatalf("ssh config = %q, want %q", string(data), want)
+	}
+
+	enabled, err = ForwardAgentEnabled("alpha")
+	if err != nil {
+		t.Fatalf("read forward agent: %v", err)
+	}
+	if !enabled {
+		t.Fatal("expected ForwardAgent to be enabled")
+	}
+
+	if err := EnableForwardAgent("alpha"); err != nil {
+		t.Fatalf("enable forward agent again: %v", err)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	if string(data) != want {
+		t.Fatalf("idempotent enable changed config:\n%s", string(data))
+	}
+
+	if err := DisableForwardAgent("alpha"); err != nil {
+		t.Fatalf("disable forward agent: %v", err)
+	}
+
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	want = "Host devbox-alpha\n    HostName 10.0.0.1\n    User ec2-user\n\nHost devbox-beta\n    HostName 10.0.0.2\n"
+	if string(data) != want {
+		t.Fatalf("ssh config = %q, want %q", string(data), want)
+	}
+
+	if err := DisableForwardAgent("alpha"); err != nil {
+		t.Fatalf("disable forward agent again: %v", err)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	if string(data) != want {
+		t.Fatalf("idempotent disable changed config:\n%s", string(data))
+	}
+}
+
+func TestEnableForwardAgentReplacesExistingNo(t *testing.T) {
+	path := writeTestSSHConfig(t, "Host devbox-alpha\n    HostName 10.0.0.1\n    ForwardAgent no\n")
+
+	if err := EnableForwardAgent("alpha"); err != nil {
+		t.Fatalf("enable forward agent: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	want := "Host devbox-alpha\n    HostName 10.0.0.1\n    ForwardAgent yes\n"
+	if string(data) != want {
+		t.Fatalf("ssh config = %q, want %q", string(data), want)
+	}
+
+	enabled, err := ForwardAgentEnabled("alpha")
+	if err != nil {
+		t.Fatalf("read forward agent: %v", err)
+	}
+	if !enabled {
+		t.Fatal("expected ForwardAgent to be enabled")
+	}
+}
+
+func TestEnableForwardAgentCleansDuplicateForwardAgentLines(t *testing.T) {
+	path := writeTestSSHConfig(t, "Host devbox-alpha\n    HostName 10.0.0.1\n    ForwardAgent no\n    ForwardAgent yes\n")
+
+	if err := EnableForwardAgent("alpha"); err != nil {
+		t.Fatalf("enable forward agent: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	want := "Host devbox-alpha\n    HostName 10.0.0.1\n    ForwardAgent yes\n"
+	if string(data) != want {
+		t.Fatalf("ssh config = %q, want %q", string(data), want)
+	}
+}
+
+func TestDisableForwardAgentRemovesNo(t *testing.T) {
+	path := writeTestSSHConfig(t, "Host devbox-alpha\n    HostName 10.0.0.1\n    ForwardAgent no\n")
+
+	if err := DisableForwardAgent("alpha"); err != nil {
+		t.Fatalf("disable forward agent: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	want := "Host devbox-alpha\n    HostName 10.0.0.1\n"
+	if string(data) != want {
+		t.Fatalf("ssh config = %q, want %q", string(data), want)
+	}
+}
+
+func TestForwardAgentEnabledRejectsMissingHost(t *testing.T) {
+	writeTestSSHConfig(t, "Host devbox-alpha\n    HostName 10.0.0.1\n")
+
+	_, err := ForwardAgentEnabled("missing")
+	if err == nil {
+		t.Fatal("expected error for missing host")
+	}
+	if !errors.Is(err, errSSHHostNotFound) {
+		t.Fatalf("expected errSSHHostNotFound, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), `host "devbox-missing" does not exist`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSyncSSHHostIPUpdatesExistingHostAndAddsMissingHost(t *testing.T) {
+	path := writeTestSSHConfig(t, "Host devbox-alpha\n    HostName 10.0.0.1\n")
+
+	if err := syncSSHHostIP("alpha", "10.0.0.9"); err != nil {
+		t.Fatalf("sync existing host: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	if !strings.Contains(string(data), "HostName 10.0.0.9") {
+		t.Fatalf("updated ip not written:\n%s", string(data))
+	}
+
+	if err := syncSSHHostIP("beta", "10.0.0.2"); err != nil {
+		t.Fatalf("sync missing host: %v", err)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	if !strings.Contains(string(data), "Host devbox-beta\n    HostName 10.0.0.2") {
+		t.Fatalf("missing host not added:\n%s", string(data))
+	}
+}
+
+func TestDeleteHostRejectsInvalidName(t *testing.T) {
+	writeTestSSHConfig(t, "Host devbox-alpha\n    HostName 10.0.0.1\n")
+
+	err := DeleteHost("")
+	if err == nil {
+		t.Fatal("expected error for empty name")
+	}
+	if !strings.Contains(err.Error(), "host name cannot be empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestUpdateHostPreservesBlockIndentAndTrailingNewline(t *testing.T) {
+	path := writeTestSSHConfig(t, "Host devbox-alpha\n\tUser ec2-user\n\nHost devbox-beta\n    HostName 10.0.0.2\n")
+
+	if err := UpdateHost("alpha", "10.0.0.1"); err != nil {
+		t.Fatalf("update host: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ssh config: %v", err)
+	}
+	got := string(data)
+	want := "Host devbox-alpha\n\tHostName 10.0.0.1\n\tUser ec2-user\n\nHost devbox-beta\n    HostName 10.0.0.2\n"
+	if got != want {
+		t.Fatalf("ssh config = %q, want %q", got, want)
 	}
 }
 

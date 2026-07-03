@@ -34,6 +34,12 @@ jobs:
             done
           done
 
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum devbox-linux-amd64 devbox-linux-arm64 devbox-darwin-amd64 devbox-darwin-arm64 > checksums.txt
+          cat checksums.txt
+
       - name: Create and push tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -63,6 +69,7 @@ jobs:
             dist/devbox-linux-arm64 \
             dist/devbox-darwin-amd64 \
             dist/devbox-darwin-arm64 \
+            dist/checksums.txt \
             --title "devbox v${VERSION}" \
             --notes "Linux and macOS builds for amd64 and arm64."
 
@@ -93,6 +100,7 @@ jobs:
             dist/devbox-linux-arm64 \
             dist/devbox-darwin-amd64 \
             dist/devbox-darwin-arm64 \
+            dist/checksums.txt \
             --target "${GITHUB_SHA}" \
             --title "devbox latest (v${VERSION})" \
             --notes "Rolling latest release for the most recent devbox version: v${VERSION}." \

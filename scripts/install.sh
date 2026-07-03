@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# steps
+# figure out where to install the binary
+# figure out the os and architecture
+# download the binary
+# verify the checksum
+# install the binary and put it in the install directory
+# add the binary to the path
+
 # --- Config ---
 repo="Tarun-Elango/devbox-cli"
 
@@ -20,6 +28,17 @@ fi
 
 # Where to install the binary (override with INSTALL_DIR=...)
 install_dir="${INSTALL_DIR:-${config_home}/.local/bin}"
+
+# Reject install dirs containing shell metacharacters: this value gets
+# embedded in an `export PATH=...` line appended to the user's shell rc
+# file, so command substitution, quotes, or newlines here would let
+# INSTALL_DIR inject arbitrary commands that run on every new shell.
+case "${install_dir}" in
+  *'$'* | *'`'* | *'"'* | *"'"* | *$'\n'*)
+    echo "INSTALL_DIR contains disallowed characters (\$, \`, quotes, or newline): ${install_dir}" >&2
+    exit 1
+    ;;
+esac
 
 # --- Detect platform ---
 # Map uname output to release asset names
@@ -42,14 +61,49 @@ case "$(uname -m)" in
 esac
 
 # --- Download ---
-# Fetch the latest release binary for this OS and CPU
-url="https://github.com/${repo}/releases/download/latest/devbox-${os}-${arch}"
+# Fetch the release binary for this OS and CPU (override with RELEASE_TAG=...)
+release_tag="${RELEASE_TAG:-latest}"
+asset_name="devbox-${os}-${arch}"
+url="https://github.com/${repo}/releases/download/${release_tag}/${asset_name}"
+checksums_url="https://github.com/${repo}/releases/download/${release_tag}/checksums.txt"
 tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
+tmp_checksums="$(mktemp)"
+trap 'rm -f "$tmp" "$tmp_checksums"' EXIT
 
-echo "Downloading devbox-${os}-${arch}..."
+echo "Downloading ${asset_name}..."
 curl -fsSL "$url" -o "$tmp"
 chmod +x "$tmp"
+
+# --- Verify checksum ---
+# Confirm the downloaded binary matches the checksum published alongside
+# it in the same release, so a compromised CDN/mirror or partial download
+# doesn't get installed and executed.
+echo "Verifying checksum..."
+curl -fsSL "$checksums_url" -o "$tmp_checksums"
+
+expected_line="$(grep -F "  ${asset_name}" "$tmp_checksums" || true)"
+if [ -z "${expected_line}" ]; then
+  echo "Could not find a checksum entry for ${asset_name} in checksums.txt" >&2
+  exit 1
+fi
+expected_sha="$(printf '%s' "${expected_line}" | awk '{print $1}')"
+
+if command -v sha256sum >/dev/null 2>&1; then
+  actual_sha="$(sha256sum "$tmp" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+  actual_sha="$(shasum -a 256 "$tmp" | awk '{print $1}')"
+else
+  echo "Neither sha256sum nor shasum is available; cannot verify checksum." >&2
+  exit 1
+fi
+
+if [ "${expected_sha}" != "${actual_sha}" ]; then
+  echo "Checksum mismatch for ${asset_name}!" >&2
+  echo "  expected: ${expected_sha}" >&2
+  echo "  actual:   ${actual_sha}" >&2
+  exit 1
+fi
+echo "Checksum OK."
 
 # --- Install ---
 # Copy the binary into place

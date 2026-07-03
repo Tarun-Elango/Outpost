@@ -1,9 +1,22 @@
 # devbox-cli
 
-Manage remote dev boxes from the CLI — provision, connect, or destroy them.  
-Support: linux, macos  
-Requirements: Aws account, linux or macos
-Usage: run locally with an AWS access key and secret key (stored locally)
+Manage remote dev boxes from the CLI — provision, connect, or destroy them.
+
+- **Requirements:** AWS account, Linux or macOS
+- **Usage:** run cli tool locally with an AWS access key and secret key (stored locally)
+
+## What is a box?
+
+A **box** is a personal dev machine on AWS — an EC2 instance running Amazon Linux that you provision, connect to, and tear down from your laptop.
+
+## Why use devbox?
+
+- **Dedicated dev machine on the cloud** — your own EC2 instance, separate from production and your daily driver
+- **Smaller blast radius** — experiments, tooling, and dependencies stay off your main machine
+- **Fast lifecycle** — create, use, and tear down boxes in minutes
+- **Reproducible setups** — spin up consistent environments from templates
+- **Build in commands for common tasks** — ssh, sync, idle-stop, git-sync
+- **Secure** — AWS credentials and config stored locally on your machine
 
 ## Table of Contents
 - [Download and Install (from GitHub release)](#download-and-install-from-github-release)
@@ -19,29 +32,26 @@ Usage: run locally with an AWS access key and secret key (stored locally)
 Every push to `main` publishes Linux and macOS binaries to the [`latest` release](https://github.com/Tarun-Elango/devbox-cli/releases/tag/latest).
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh | bash
 ```
 
-This detects your OS and CPU, downloads the matching binary, installs it to `~/.local/bin`, and adds that directory to your shell config if needed. Restart your shell, then verify:
+Don't want to install the latest version? Pin a version with `RELEASE_TAG`, or install system-wide to `/usr/local/bin` (requires `sudo`, no shell config changes):
 
 ```bash
-devbox ls
+RELEASE_TAG=v0.7.0 curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh | bash
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/latest/scripts/install.sh | sudo bash
 ```
 
-To install system-wide (no shell config changes — `/usr/local/bin` is usually already on PATH):
-
-Same script as above, but installs to `/usr/local/bin` for all users on the machine; requires `sudo`, and skips editing your shell config.
-
-```bash
-INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/devbox-cli/main/scripts/install.sh | sudo bash
-```
+Verify with `devbox ls`.
 
 ## Setup
 
-Run the interactive setup wizard to configure AWS credentials and local config:
+Run the interactive setup wizard to configure AWS credentials and local config, then create and connect to your first box:
 
 ```bash
 devbox setup
+devbox create mybox
+devbox ssh mybox
 ```
 
 Credentials are stored locally in your home directory.
@@ -141,6 +151,8 @@ Run `devbox` with no arguments to print usage, or see the table below.
 
 ### Snapshots
 
+A snapshot is a saved disk image of a box; restore one with `create --from`.
+
 | Command | Notes |
 | --- | --- |
 | `snapshot` | List all snapshots |
@@ -149,6 +161,8 @@ Run `devbox` with no arguments to print usage, or see the table below.
 | `snapshot delete <amiId-or-name>` | Delete a snapshot |
 
 ### Templates
+
+Templates let you create boxes preloaded with libs, tools, and other setup.
 
 | Command | Notes |
 | --- | --- |
@@ -166,6 +180,14 @@ Run `devbox` with no arguments to print usage, or see the table below.
 | `idle-stop show <id-or-name>` | Show idle-stop settings for a box |
 | `idle-stop update <id-or-name> <minutes>` | Update idle-stop timeout |
 | `idle-stop delete <id-or-name>` | Remove idle-stop from a box |
+
+### Git sync
+
+Toggle GitHub SSH access for a box: adds your local SSH key to `ssh-agent` and enables agent forwarding (`-A`) in the box's SSH config. Run again to undo both.
+
+| Command | Notes |
+| --- | --- |
+| `git-sync <id-or-name>` | Toggle GitHub SSH agent forwarding for a box |
 
 ## Notes on local config (`~/.devbox`)
 
