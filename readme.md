@@ -1,6 +1,6 @@
 # devbox-cli
 
-Manage remote dev boxes from the CLI — provision, connect, or destroy them.
+Manage remote dev boxes from the CLI — provision, connect, sync, and destroy them with your own cloud account (BYOK).
 
 - **Requirements:** AWS account, Linux or macOS
 - **Usage:** run cli tool locally with an AWS access key and secret key (stored locally)
@@ -183,7 +183,7 @@ Templates let you create boxes preloaded with libs, tools, and other setup.
 
 ### Git sync
 
-Toggle GitHub SSH access for a box: adds your local SSH key to `ssh-agent` and enables agent forwarding (`-A`) in the box's SSH config. Run again to undo both.
+Use your local GitHub SSH key on a box (for `git push`, `git clone`, etc.) without copying it there: adds the key to `ssh-agent` and enables agent forwarding (`-A`) in the box's SSH config. Run again to undo both.
 
 | Command | Notes |
 | --- | --- |

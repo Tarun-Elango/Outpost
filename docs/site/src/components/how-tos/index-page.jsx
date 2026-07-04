@@ -21,6 +21,16 @@ const guides = [
     title: 'Remote desktop–like UI',
     description: 'work on your box with a desktop-style experience',
   },
+  {
+    to: '/how-tos/vscode-ssh',
+    title: 'VS Code & SSH without the CLI',
+    description: 'use the SSH config devbox writes to connect with ssh or VS Code',
+  },
+  {
+    to: '/how-tos/ai-sandbox',
+    title: 'AI sandbox box',
+    description: 'create a box with Codex or another AI tool for remote experiments',
+  },
 ]
 
 export default function HowTosIndexPage() {
