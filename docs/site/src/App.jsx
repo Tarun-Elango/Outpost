@@ -8,6 +8,8 @@ import SshHowTo from './components/how-tos/ssh'
 import TransferHowTo from './components/how-tos/transfer'
 import GithubSyncHowTo from './components/how-tos/github-sync'
 import RemoteDesktopHowTo from './components/how-tos/remote-desktop'
+import VscodeSshHowTo from './components/how-tos/vscode-ssh'
+import AiSandboxHowTo from './components/how-tos/ai-sandbox'
 import DocsLayout from './components/docs'
 import DocsIndexPage from './components/docs/index-page'
 import InstallDoc from './components/docs/install'
@@ -30,6 +32,8 @@ function App() {
             <Route path="transfer" element={<TransferHowTo />} />
             <Route path="github-sync" element={<GithubSyncHowTo />} />
             <Route path="remote-desktop" element={<RemoteDesktopHowTo />} />
+            <Route path="vscode-ssh" element={<VscodeSshHowTo />} />
+            <Route path="ai-sandbox" element={<AiSandboxHowTo />} />
           </Route>
           <Route path="/docs" element={<DocsLayout />}>
           {/* below are the routes for the docs page, so docs/children */}

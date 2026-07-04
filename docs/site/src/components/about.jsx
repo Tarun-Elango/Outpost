@@ -4,7 +4,7 @@
         <h1>devbox CLI</h1>
         <p className="tagline">
           Manage remote dev boxes from the terminal — provision, connect, sync, and
-          destroy them.
+          destroy them with your own cloud account (BYOK).
         </p>
 
         <div className="card card-purpose">
@@ -142,6 +142,7 @@
                 y2="130"
                 stroke="#000080"
                 strokeWidth="2"
+                markerStart="url(#arrow)"
                 markerEnd="url(#arrow)"
               />
               <text
@@ -152,7 +153,7 @@
                 fontSize="12"
                 fill="#000080"
               >
-                setup · create · start · ssh
+                create · start · ssh · sync
               </text>
               <text
                 x="339"
@@ -162,14 +163,14 @@
                 fontSize="12"
                 fill="#000080"
               >
-                sync · forward · stop · delete
+                forward · stop · delete
               </text>
 
               <rect
                 x="420"
                 y="30"
                 width="220"
-                height="200"
+                height="218"
                 fill="#FFFFCC"
                 stroke="#000080"
                 strokeWidth="2"
@@ -178,7 +179,7 @@
                 x="424"
                 y="34"
                 width="212"
-                height="192"
+                height="210"
                 fill="none"
                 stroke="#000080"
                 strokeWidth="0.75"
@@ -256,26 +257,27 @@
               >
                 dev box 2
               </text>
+              <text
+                x="530"
+                y="224"
+                textAnchor="middle"
+                fontFamily="Times New Roman, Times, serif"
+                fontSize="11"
+                fontStyle="italic"
+                fill="#000080"
+              >
+                spin up n boxes as needed
+              </text>
 
               <text
                 x="150"
-                y="222"
+                y="190"
                 textAnchor="middle"
                 fontFamily="Times New Roman, Times, serif"
-                fontSize="12"
+                fontSize="11"
                 fill="#000080"
               >
                 config &amp; credentials stay local
-              </text>
-              <text
-                x="530"
-                y="250"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="12"
-                fill="#000080"
-              >
-                boxes spin up, connect, and tear down in minutes
               </text>
             </svg>
           </div>
@@ -312,10 +314,12 @@
           <h2>Requirements</h2>
           <ul>
             <li>macOS or Linux</li>
-            <li>AWS account</li>
+            <li>Your own AWS account (BYOK)</li>
           </ul>
           <p className="note">
-            AWS credentials and devbox config will be stored locally on your machine.
+            devbox runs on your machine and uses your AWS account — no shared cloud,
+            no hosted credentials. Run <code>devbox setup</code> to save keys locally in{' '}
+            <code>~/.devbox/</code>.
           </p>
         </div>
 
