@@ -118,7 +118,7 @@ Use your local GitHub SSH key on a box (for `git push`, `git clone`, etc.) witho
 Go to your AWS console 
 
 1. **create an IAM user**
-Go to the IAM console → **Users** → **Create user**. Name it (e.g. `devbox-cli`), choose **Attach policies directly**, search for `AmazonEC2FullAccess`, select it, and create the user.
+Go to the IAM console → **Users** → **Create user**. Name it (e.g. `devbox-cli`), choose **Attach policies directly**, search for `AmazonEC2FullAccess` and `AWSBudgetsReadOnlyAccess`, select it, and create the user.
 
 2. **Access keys** 
 Open the user → **Security credentials** → **Access keys** → **Create access key**. Select **Local code**, confirm, then copy the **Access key ID** and **Secret access key** (the secret is shown only once).

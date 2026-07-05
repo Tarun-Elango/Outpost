@@ -82,13 +82,20 @@ func ListBudgets(ctx context.Context, opts ListBudgetsOptions) (ListBudgetsResul
 
 	summaries, err := describeAllBudgets(ctx, budgetsClient, accountID) // describe all the budgets
 	if err != nil {
-		return ListBudgetsResult{}, awsclient.WrapError("list budgets", err)
+		return ListBudgetsResult{}, wrapBudgetError("list budgets", err)
 	}
 
 	fetchedAt := time.Now()
 	writeBudgetCache(budgetCachePayload{FetchedAt: fetchedAt, AccountID: accountID, Budgets: summaries}) // write the cache
 
 	return ListBudgetsResult{Budgets: summaries, Cached: false, FetchedAt: fetchedAt}, nil
+}
+
+func wrapBudgetError(operation string, err error) error {
+	if awsclient.IsPermissionError(err) {
+		return fmt.Errorf("%s: %w\nhint: add the AWSBudgetsReadOnlyAccess permission policy to the IAM user", operation, err)
+	}
+	return awsclient.WrapError(operation, err)
 }
 
 // accountIDForBudgets resolves the AWS account ID via STS, using the box

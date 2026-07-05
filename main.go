@@ -10,6 +10,62 @@ import (
 
 const helpTopics = "create, box, ssh, snapshot, template, idle-stop, git-sync, budget"
 
+var commandHelpTopics = map[string]string{
+	"create":    "create",
+	"box":       "box",
+	"ls":        "box",
+	"status":    "box",
+	"rename":    "box",
+	"resize":    "box",
+	"upgrade":   "box",
+	"stop":      "box",
+	"start":     "box",
+	"restart":   "box",
+	"reboot":    "box",
+	"delete":    "box",
+	"ssh":       "ssh",
+	"cp":        "ssh",
+	"sync":      "ssh",
+	"exec":      "ssh",
+	"forward":   "ssh",
+	"snapshot":  "snapshot",
+	"template":  "template",
+	"idle-stop": "idle-stop",
+	"git-sync":  "git-sync",
+	"budget":    "budget",
+	"cost":      "budget",
+	"bill":      "budget",
+}
+
+func isHelpFlag(s string) bool {
+	return s == "help" || s == "-h" || s == "--help"
+}
+
+// resolveHelpTopic handles help anywhere in the invocation, e.g.
+// "devbox help box", "devbox box help", or "devbox snapshot create help".
+func resolveHelpTopic(command string, args []string) (topic string, showGeneral bool, ok bool) {
+	if command == "help" || isHelpFlag(command) {
+		for _, arg := range args {
+			if !isHelpFlag(arg) {
+				return arg, false, true
+			}
+		}
+		return "", true, true
+	}
+
+	for _, arg := range args {
+		// if the argument is a help flag, return the topic from the map
+		if isHelpFlag(arg) {
+			if t, exists := commandHelpTopics[command]; exists {
+				return t, false, true
+			}
+			return "", true, true
+		}
+	}
+
+	return "", false, false
+}
+
 func usage() {
 	fmt.Fprintf(os.Stderr, `Usage: devbox <command> [args]
 
@@ -203,13 +259,8 @@ Requires the budgets:ViewBudget IAM permission. Results are cached under
 `)
 }
 
-func helpCommand(args []string) {
-	if len(args) == 0 {
-		usage()
-		return
-	}
-
-	switch args[0] {
+func showHelpTopic(topic string) {
+	switch topic {
 	case "create":
 		helpCreate()
 	case "box":
@@ -224,10 +275,10 @@ func helpCommand(args []string) {
 		helpIdleStop()
 	case "git-sync":
 		helpGitSync()
-	case "budget":
+	case "budget", "cost", "bill":
 		helpBudget()
 	default:
-		fmt.Fprintf(os.Stderr, "devbox: unknown help topic %q\n\n", args[0])
+		fmt.Fprintf(os.Stderr, "devbox: unknown help topic %q\n\n", topic)
 		fmt.Fprintf(os.Stderr, "Topics: %s\n", helpTopics)
 		os.Exit(1)
 	}
@@ -243,13 +294,16 @@ func main() {
 	command := os.Args[1]
 	args := os.Args[2:]
 
+	if topic, general, ok := resolveHelpTopic(command, args); ok {
+		if general {
+			usage()
+		} else {
+			showHelpTopic(topic)
+		}
+		os.Exit(0)
+	}
+
 	switch command {
-	case "help":
-		helpCommand(args)
-		os.Exit(0)
-	case "-h", "--help":
-		usage()
-		os.Exit(0)
 	case "version":
 		cmd.Version(args)
 	case "update":

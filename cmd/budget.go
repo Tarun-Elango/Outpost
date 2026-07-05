@@ -7,7 +7,6 @@ import (
 
 	"devbox-cli/helper"
 	"devbox-cli/service"
-	awsclient "devbox-cli/service/aws"
 )
 
 const budgetUsage = "usage: devbox budget [ls] [--refresh]"
@@ -53,13 +52,7 @@ func budgetList(args []string) {
 
 	result, err := service.ListBudgets(ctx, service.ListBudgetsOptions{Refresh: refresh})
 	if err != nil {
-		// if the error is a permission error, print a hint
-		if awsclient.IsPermissionError(err) {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			fmt.Fprintln(os.Stderr, "hint: IAM action budgets:ViewBudget is required to list budgets")
-		} else {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		}
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 
