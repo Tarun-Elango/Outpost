@@ -51,8 +51,8 @@ Commands:
                         devbox cp mybox:/home/ec2-user/app/main.go ./
   sync [-i key] [--delete] <source> <dest>
                       Sync directories via rsync over SSH (one local path, one box:/path)
-                        Only dest is modified; source is read-only
-                        --delete  Also remove files on dest that are not in source
+                        Only dest is modified; source is read-only.
+                        --delete also removes files on dest that are not in source
                         devbox sync ./project mybox:/home/ec2-user/project
                         devbox sync mybox:/home/ec2-user/project ./project
   exec [-i key] [-s] [-t] <id|name> -- <command>

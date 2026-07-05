@@ -1,9 +1,20 @@
 import { Link } from 'react-router-dom'
+import DocOutline from '../docs/doc-outline'
 import HowToPage from './how-to-page'
+
+const sections = [
+  { id: 'pick-template', label: 'Pick a template' },
+  { id: 'create-box', label: 'Create the box' },
+  { id: 'connect', label: 'Wait for setup, then connect' },
+  { id: 'work-remotely', label: 'Work remotely' },
+  { id: 'save-money', label: 'Save money when idle' },
+]
 
 export default function AiSandboxHowTo() {
   return (
     <HowToPage title="AI sandbox box">
+      <DocOutline items={sections} />
+
       <div className="card">
         <p>
           Spin up a remote box with Codex, Cursor Agent, Claude Code, or another AI coding
@@ -14,7 +25,7 @@ export default function AiSandboxHowTo() {
       </div>
 
       <div className="card">
-        <h2>1. Pick a template</h2>
+        <h2 id="pick-template">1. Pick a template</h2>
         <p>List built-in templates (includes several AI agents):</p>
         <pre>
           <code>devbox template</code>
@@ -45,7 +56,7 @@ export default function AiSandboxHowTo() {
       </div>
 
       <div className="card">
-        <h2>2. Create the box</h2>
+        <h2 id="create-box">2. Create the box</h2>
         <pre>
           <code>devbox create sandbox --template opencode claude-code</code>
         </pre>
@@ -59,7 +70,7 @@ export default function AiSandboxHowTo() {
       </div>
 
       <div className="card">
-        <h2>3. Wait for setup, then connect</h2>
+        <h2 id="connect">3. Wait for setup, then connect</h2>
         <pre>
           <code>{`devbox status sandbox
 devbox ssh sandbox`}</code>
@@ -79,7 +90,7 @@ devbox ssh sandbox`}</code>
       </div>
 
       <div className="card">
-        <h2>4. Work remotely</h2>
+        <h2 id="work-remotely">4. Work remotely</h2>
         <p>Typical workflow on the box:</p>
         <pre>
           <code>{`mkdir -p ~/experiments && cd ~/experiments
@@ -104,7 +115,7 @@ codex`}</code>
       </div>
 
       <div className="card">
-        <h2>5. Save money when idle</h2>
+        <h2 id="save-money">5. Save money when idle</h2>
         <p>Stop the box when you are not using it:</p>
         <pre>
           <code>devbox stop sandbox</code>
