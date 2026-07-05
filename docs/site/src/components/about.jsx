@@ -329,7 +329,7 @@ export default function AboutPage() {
             </li>
           </ul>
           <p className="note">
-            devbox runs on your machine and uses your AWS account — no shared cloud,
+            devbox cli runs on your machine and uses your AWS account — no shared cloud,
             no hosted credentials. Run <code>devbox setup</code> to save keys locally in{' '}
             <code>~/.devbox/</code>.
           </p>
