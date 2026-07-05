@@ -30,8 +30,20 @@ func LoadConfig() (*appconfig.Config, error) {
 	return appconfig.Load() // return config struct, and error
 }
 
-// NewClient loads app credentials and builds an AWS SDK config.
+// NewClient loads app credentials and builds an AWS SDK config for the configured region.
 func NewClient(ctx context.Context) (*Client, error) {
+	appCfg, err := LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+	if appCfg.AwsRegion == "" {
+		return nil, fmt.Errorf("aws region is required; run: devbox setup")
+	}
+	return NewClientForRegion(ctx, appCfg.AwsRegion)
+}
+
+// NewClientForRegion loads app credentials and builds an AWS SDK config for region.
+func NewClientForRegion(ctx context.Context, region string) (*Client, error) {
 	appCfg, err := LoadConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
@@ -39,7 +51,7 @@ func NewClient(ctx context.Context) (*Client, error) {
 	if appCfg.AwsSecret == "" || appCfg.AwsAccessKey == "" {
 		return nil, fmt.Errorf("aws secret and access key are required")
 	}
-	if appCfg.AwsRegion == "" {
+	if region == "" {
 		return nil, fmt.Errorf("aws region is required; run: devbox setup")
 	}
 
@@ -49,7 +61,7 @@ func NewClient(ctx context.Context) (*Client, error) {
 			appCfg.AwsSecret,
 			"",
 		)),
-		awsconfig.WithRegion(appCfg.AwsRegion),
+		awsconfig.WithRegion(region),
 		awsconfig.WithRetryMode(aws.RetryModeAdaptive),
 		awsconfig.WithHTTPClient(&http.Client{Timeout: awsRequestTimeout}),
 	}

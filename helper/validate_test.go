@@ -259,7 +259,7 @@ func TestResolveBoxTarget(t *testing.T) {
 	)
 
 	if err := rt.DB().InsertInstance(
-		boxID, awsID, name, service.LocalUserID, "running", "t3.micro",
+		boxID, awsID, name, service.LocalUserID, "running", "t3.micro", "us-east-1", "aws",
 	); err != nil {
 		t.Fatalf("insert instance: %v", err)
 	}

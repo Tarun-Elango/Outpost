@@ -2,14 +2,11 @@
 
 Manage remote dev boxes from the CLI — provision, connect, sync, and destroy them with your own cloud account (BYOK).
 
-- **Requirements:** AWS account, Linux or macOS
-- **Usage:** run cli tool locally with an AWS access key and secret key (stored locally)
+- **Requirements:** An AWS account, Linux or macOS computer.
 
 ## What is a box?
 
 A **box** is a personal dev machine on AWS — an EC2 instance running Amazon Linux that you provision, connect to, and tear down from your laptop.
-
-## Why use devbox?
 
 - **Dedicated dev machine on the cloud** — your own EC2 instance, separate from production and your daily driver
 - **Smaller blast radius** — experiments, tooling, and dependencies stay off your main machine

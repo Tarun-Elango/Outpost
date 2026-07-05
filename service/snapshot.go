@@ -37,7 +37,7 @@ func (r *Runtime) CreateSnapshot(boxID, name, userID string) (*Snapshot, error) 
 		return nil, fmt.Errorf("cannot snapshot a %s instance: %s", instance.Status, boxID)
 	}
 
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.EC2ForInstance(boxID) // get ec2 client for the instance
 	if err != nil {
 		return nil, err
 	}

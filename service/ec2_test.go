@@ -29,7 +29,7 @@ func TestCreateInstanceRejectsDuplicateNameBeforeAWS(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", DefaultInstanceType); err != nil {
+	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", DefaultInstanceType, "us-east-1", "aws"); err != nil {
 		t.Fatalf("insert existing instance: %v", err)
 	}
 

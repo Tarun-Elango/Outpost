@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"devbox-cli/internal/backup"
+	"devbox-cli/internal/config"
 	"devbox-cli/internal/sqliteutil"
 )
 
@@ -84,9 +85,64 @@ func (db *DB) migrate() error {
 			return fmt.Errorf("migrate: %w", err)
 		}
 	}
-	// CREATE TABLE IF NOT EXISTS does not alter existing tables; upgrade old DBs once.
-	//return db.migrateSnapshotsBoxFK()
+	return db.migrateInstancesRegionProvider()
+}
+
+// one time migration to add region and provider columns to instances table
+func (db *DB) migrateInstancesRegionProvider() error {
+	cols, err := db.tableColumns("instances")
+	if err != nil {
+		return err
+	}
+	if !cols["region"] {
+		if _, err := db.conn.Exec(`ALTER TABLE instances ADD COLUMN region TEXT`); err != nil {
+			return fmt.Errorf("migrate instances region: %w", err)
+		}
+	}
+	if !cols["provider"] {
+		if _, err := db.conn.Exec(`ALTER TABLE instances ADD COLUMN provider TEXT`); err != nil {
+			return fmt.Errorf("migrate instances provider: %w", err)
+		}
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("migrate instances region/provider backfill: %w", err)
+	}
+	defaultRegion := cfg.AwsRegion
+	_, err = db.conn.Exec(`
+		UPDATE instances
+		SET region = COALESCE(NULLIF(region, ''), ?),
+		    provider = COALESCE(NULLIF(provider, ''), 'aws')
+		WHERE region IS NULL OR region = '' OR provider IS NULL OR provider = ''`,
+		defaultRegion,
+	)
+	if err != nil {
+		return fmt.Errorf("migrate instances region/provider backfill: %w", err)
+	}
 	return nil
+}
+
+// returns the list of columns in the table
+func (db *DB) tableColumns(table string) (map[string]bool, error) {
+	rows, err := db.conn.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return nil, fmt.Errorf("inspect %s schema: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	cols := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
+			return nil, fmt.Errorf("scan %s column: %w", table, err)
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
 }
 
 // func (db *DB) migrateSnapshotsBoxFK() error {

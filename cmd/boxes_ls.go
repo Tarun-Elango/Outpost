@@ -29,9 +29,9 @@ func Ls(args []string) {
 		return
 	}
 
-	fmt.Printf("%-24s  %-20s  %-10s  %-16s\n", "ID", "NAME", "STATUS", "PUBLIC IP")
-	fmt.Println(strings.Repeat("-", 80))
+	fmt.Printf("%-24s  %-20s  %-10s  %-8s  %-16s  %-16s\n", "ID", "NAME", "STATUS", "PROVIDER", "REGION", "PUBLIC IP")
+	fmt.Println(strings.Repeat("-", 100))
 	for _, b := range boxes {
-		fmt.Printf("%-24s  %-20s  %-10s  %-16s\n", b.ID, b.Name, b.Status, b.PublicIP)
+		fmt.Printf("%-24s  %-20s  %-10s  %-8s  %-16s  %-16s\n", b.ID, b.Name, b.Status, b.Provider, b.Region, b.PublicIP)
 	}
 }
