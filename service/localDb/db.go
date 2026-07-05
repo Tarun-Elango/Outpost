@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"devbox-cli/internal/backup"
 	"devbox-cli/internal/config"
@@ -85,7 +86,10 @@ func (db *DB) migrate() error {
 			return fmt.Errorf("migrate: %w", err)
 		}
 	}
-	return db.migrateInstancesRegionProvider()
+	if err := db.migrateInstancesRegionProvider(); err != nil {
+		return err
+	}
+	return db.migrateSnapshotsRegionProvider()
 }
 
 // one time migration to add region and provider columns to instances table
@@ -95,12 +99,12 @@ func (db *DB) migrateInstancesRegionProvider() error {
 		return err
 	}
 	if !cols["region"] {
-		if _, err := db.conn.Exec(`ALTER TABLE instances ADD COLUMN region TEXT`); err != nil {
+		if _, err := db.conn.Exec(`ALTER TABLE instances ADD COLUMN region TEXT`); err != nil && !isDuplicateColumnError(err, "region") {
 			return fmt.Errorf("migrate instances region: %w", err)
 		}
 	}
 	if !cols["provider"] {
-		if _, err := db.conn.Exec(`ALTER TABLE instances ADD COLUMN provider TEXT`); err != nil {
+		if _, err := db.conn.Exec(`ALTER TABLE instances ADD COLUMN provider TEXT`); err != nil && !isDuplicateColumnError(err, "provider") {
 			return fmt.Errorf("migrate instances provider: %w", err)
 		}
 	}
@@ -121,6 +125,48 @@ func (db *DB) migrateInstancesRegionProvider() error {
 		return fmt.Errorf("migrate instances region/provider backfill: %w", err)
 	}
 	return nil
+}
+
+// one time migration to add region and provider columns to snapshots table.
+// Snapshots used to derive their region solely from the source box, which
+// breaks once the box is deleted; storing region/provider on the snapshot
+// itself keeps it independently addressable.
+func (db *DB) migrateSnapshotsRegionProvider() error {
+	cols, err := db.tableColumns("snapshots")
+	if err != nil {
+		return err
+	}
+	if !cols["region"] {
+		if _, err := db.conn.Exec(`ALTER TABLE snapshots ADD COLUMN region TEXT`); err != nil && !isDuplicateColumnError(err, "region") {
+			return fmt.Errorf("migrate snapshots region: %w", err)
+		}
+	}
+	if !cols["provider"] {
+		if _, err := db.conn.Exec(`ALTER TABLE snapshots ADD COLUMN provider TEXT`); err != nil && !isDuplicateColumnError(err, "provider") {
+			return fmt.Errorf("migrate snapshots provider: %w", err)
+		}
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("migrate snapshots region/provider backfill: %w", err)
+	}
+	defaultRegion := cfg.AwsRegion
+	_, err = db.conn.Exec(`
+		UPDATE snapshots
+		SET region = COALESCE(NULLIF(region, ''), (SELECT region FROM instances WHERE instances.id = snapshots.box_id), NULLIF(?, '')),
+		    provider = COALESCE(NULLIF(provider, ''), (SELECT provider FROM instances WHERE instances.id = snapshots.box_id), 'aws')
+		WHERE region IS NULL OR region = '' OR provider IS NULL OR provider = ''`,
+		defaultRegion,
+	)
+	if err != nil {
+		return fmt.Errorf("migrate snapshots region/provider backfill: %w", err)
+	}
+	return nil
+}
+
+func isDuplicateColumnError(err error, column string) bool {
+	return err != nil && strings.Contains(err.Error(), "duplicate column name: "+column)
 }
 
 // returns the list of columns in the table

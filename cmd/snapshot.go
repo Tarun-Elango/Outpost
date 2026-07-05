@@ -17,6 +17,8 @@ type snapshotItem struct {
 	Name     string `json:"name"`
 	State    string `json:"state"`
 	BoxAwsID string `json:"boxAwsId"`
+	Region   string `json:"region"`
+	Provider string `json:"provider"`
 }
 
 // Snapshot dispatches snapshot sub-commands.
@@ -135,6 +137,8 @@ func snapshotsToItems(snaps []*service.Snapshot) []snapshotItem {
 			Name:     s.Name,
 			State:    s.State,
 			BoxAwsID: s.BoxAwsID,
+			Region:   s.Region,
+			Provider: s.Provider,
 		}
 	}
 	return items
@@ -171,9 +175,9 @@ func snapshotsDelete(amiID string) {
 }
 
 func printSnapshotTable(items []snapshotItem) {
-	fmt.Printf("%-24s  %-20s  %-12s  %s\n", "AMI ID", "NAME", "STATE", "BOX ID")
-	fmt.Println(strings.Repeat("-", 90))
+	fmt.Printf("%-24s  %-20s  %-12s  %-14s  %-10s  %s\n", "AMI ID", "NAME", "STATE", "REGION", "PROVIDER", "BOX ID")
+	fmt.Println(strings.Repeat("-", 120))
 	for _, s := range items {
-		fmt.Printf("%-24s  %-20s  %-12s  %s\n", s.AmiID, s.Name, s.State, s.BoxAwsID)
+		fmt.Printf("%-24s  %-20s  %-12s  %-14s  %-10s  %s\n", s.AmiID, s.Name, s.State, s.Region, s.Provider, s.BoxAwsID)
 	}
 }

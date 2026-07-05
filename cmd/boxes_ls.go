@@ -18,13 +18,19 @@ func Ls(args []string) {
 	rt := helper.MustOpenRuntime()
 	defer func() { _ = rt.Close() }()
 	instances, err := rt.ListInstances(service.LocalUserID)
-	if err != nil {
+	if err != nil && len(instances) == 0 {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 	}
 	boxes = instancesToBoxes(instances)
 
 	if len(boxes) == 0 {
+		if err != nil {
+			return
+		}
 		fmt.Println("No boxes found.")
 		return
 	}

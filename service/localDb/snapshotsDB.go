@@ -17,7 +17,33 @@ type SnapshotRecord struct {
 	UserID    string
 	BoxID     sql.NullString
 	State     sql.NullString
+	Region    sql.NullString
+	Provider  sql.NullString
 	CreatedAt string
+}
+
+const snapshotSelectColumns = `id, ami_id, name, user_id, box_id, state, region, provider, created_at`
+
+// scanSnapshotRecord scans a row from the snapshots table into a SnapshotRecord.
+func scanSnapshotRecord(scanner interface {
+	Scan(dest ...any) error
+}) (*SnapshotRecord, error) {
+	var r SnapshotRecord
+	err := scanner.Scan(
+		&r.ID,
+		&r.AmiID,
+		&r.Name,
+		&r.UserID,
+		&r.BoxID,
+		&r.State,
+		&r.Region,
+		&r.Provider,
+		&r.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 // SnapshotWithBoxAwsID is a snapshot row joined with the source box's AWS instance id.
@@ -54,16 +80,18 @@ func (db *DB) ValidateSnapshotNameAvailable(name, userID string) error {
 	return nil
 }
 
-// InsertSnapshot creates a new snapshot row owned by userID.
-func (db *DB) InsertSnapshot(id, amiID, name, userID, boxID, state string) error {
+// InsertSnapshot creates a new snapshot row owned by userID. region and provider
+// are captured at creation time so the snapshot remains addressable even if its
+// source box is later deleted.
+func (db *DB) InsertSnapshot(id, amiID, name, userID, boxID, state, region, provider string) error {
 	if err := db.ValidateSnapshotNameAvailable(name, userID); err != nil {
 		return err
 	}
 
 	_, err := db.conn.Exec(`
-		INSERT INTO snapshots (id, ami_id, name, user_id, box_id, state)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		id, amiID, strings.TrimSpace(name), userID, nullIfEmpty(boxID), nullIfEmpty(state),
+		INSERT INTO snapshots (id, ami_id, name, user_id, box_id, state, region, provider)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, amiID, strings.TrimSpace(name), userID, nullIfEmpty(boxID), nullIfEmpty(state), nullIfEmpty(region), nullIfEmpty(provider),
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: snapshots.user_id, snapshots.name") {
@@ -109,25 +137,13 @@ func (db *DB) SnapshotBelongsToUser(id, userID string) (bool, error) {
 // GetSnapshotByNameAndUserID returns the snapshot row for name owned by userID,
 // or sql.ErrNoRows if not found.
 func (db *DB) GetSnapshotByNameAndUserID(name, userID string) (*SnapshotRecord, error) {
-	var r SnapshotRecord
-	err := db.conn.QueryRow(`
-		SELECT id, ami_id, name, user_id, box_id, state, created_at
+	row := db.conn.QueryRow(`
+		SELECT `+snapshotSelectColumns+`
 		FROM snapshots
 		WHERE name = ? AND user_id = ?`,
 		strings.TrimSpace(name), userID,
-	).Scan(
-		&r.ID,
-		&r.AmiID,
-		&r.Name,
-		&r.UserID,
-		&r.BoxID,
-		&r.State,
-		&r.CreatedAt,
 	)
-	if err != nil {
-		return nil, err
-	}
-	return &r, nil
+	return scanSnapshotRecord(row)
 }
 
 // ResolveSnapshotByAmiIDOrName resolves a user-provided snapshot reference.
@@ -165,31 +181,19 @@ func (db *DB) ResolveSnapshotByAmiIDOrName(ref, userID string) (*SnapshotRecord,
 // GetSnapshotByAmiIDAndUserID returns the snapshot row for amiID owned by userID,
 // or sql.ErrNoRows if not found.
 func (db *DB) GetSnapshotByAmiIDAndUserID(amiID, userID string) (*SnapshotRecord, error) {
-	var r SnapshotRecord
-	err := db.conn.QueryRow(`
-		SELECT id, ami_id, name, user_id, box_id, state, created_at
+	row := db.conn.QueryRow(`
+		SELECT `+snapshotSelectColumns+`
 		FROM snapshots
 		WHERE ami_id = ? AND user_id = ?`,
 		amiID, userID,
-	).Scan(
-		&r.ID,
-		&r.AmiID,
-		&r.Name,
-		&r.UserID,
-		&r.BoxID,
-		&r.State,
-		&r.CreatedAt,
 	)
-	if err != nil {
-		return nil, err
-	}
-	return &r, nil
+	return scanSnapshotRecord(row)
 }
 
 // ListSnapshotsByBoxIDAndUserID returns snapshots for boxID owned by userID.
 func (db *DB) ListSnapshotsByBoxIDAndUserID(boxID, userID string) ([]SnapshotRecord, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, ami_id, name, user_id, box_id, state, created_at
+		SELECT `+snapshotSelectColumns+`
 		FROM snapshots
 		WHERE box_id = ? AND user_id = ?
 		ORDER BY created_at`,
@@ -202,19 +206,11 @@ func (db *DB) ListSnapshotsByBoxIDAndUserID(boxID, userID string) ([]SnapshotRec
 
 	var records []SnapshotRecord
 	for rows.Next() {
-		var r SnapshotRecord
-		if err := rows.Scan(
-			&r.ID,
-			&r.AmiID,
-			&r.Name,
-			&r.UserID,
-			&r.BoxID,
-			&r.State,
-			&r.CreatedAt,
-		); err != nil {
+		r, err := scanSnapshotRecord(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan snapshot: %w", err)
 		}
-		records = append(records, r)
+		records = append(records, *r)
 	}
 	return records, rows.Err()
 }
@@ -222,7 +218,7 @@ func (db *DB) ListSnapshotsByBoxIDAndUserID(boxID, userID string) ([]SnapshotRec
 // ListSnapshotsByUserID returns all snapshots owned by userID.
 func (db *DB) ListSnapshotsByUserID(userID string) ([]SnapshotRecord, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, ami_id, name, user_id, box_id, state, created_at
+		SELECT `+snapshotSelectColumns+`
 		FROM snapshots
 		WHERE user_id = ?
 		ORDER BY created_at`,
@@ -235,19 +231,11 @@ func (db *DB) ListSnapshotsByUserID(userID string) ([]SnapshotRecord, error) {
 
 	var records []SnapshotRecord
 	for rows.Next() {
-		var r SnapshotRecord
-		if err := rows.Scan(
-			&r.ID,
-			&r.AmiID,
-			&r.Name,
-			&r.UserID,
-			&r.BoxID,
-			&r.State,
-			&r.CreatedAt,
-		); err != nil {
+		r, err := scanSnapshotRecord(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan snapshot: %w", err)
 		}
-		records = append(records, r)
+		records = append(records, *r)
 	}
 	return records, rows.Err()
 }
@@ -255,7 +243,7 @@ func (db *DB) ListSnapshotsByUserID(userID string) ([]SnapshotRecord, error) {
 // ListSnapshotsByUserIDWithBoxAwsID returns snapshots for userID with aws_instance_id joined from instances.
 func (db *DB) ListSnapshotsByUserIDWithBoxAwsID(userID string) ([]SnapshotWithBoxAwsID, error) {
 	rows, err := db.conn.Query(`
-		SELECT s.id, s.ami_id, s.name, s.user_id, s.box_id, s.state, s.created_at, i.aws_instance_id
+		SELECT s.id, s.ami_id, s.name, s.user_id, s.box_id, s.state, s.region, s.provider, s.created_at, i.aws_instance_id
 		FROM snapshots s
 		LEFT JOIN instances i ON s.box_id = i.id AND i.user_id = s.user_id
 		WHERE s.user_id = ?
@@ -278,6 +266,8 @@ func (db *DB) ListSnapshotsByUserIDWithBoxAwsID(userID string) ([]SnapshotWithBo
 			&r.UserID,
 			&r.BoxID,
 			&r.State,
+			&r.Region,
+			&r.Provider,
 			&r.CreatedAt,
 			&r.BoxAwsID,
 		); err != nil {

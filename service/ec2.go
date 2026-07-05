@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -93,6 +94,7 @@ func (r *Runtime) ListInstances(userID string) ([]*Instance, error) {
 
 	ctx := r.Context()
 	instances := make([]*Instance, 0, len(records))
+	var regionErrs []error
 
 	for region, regionRecords := range byRegion {
 		awsIDs := make([]string, len(regionRecords))
@@ -102,7 +104,8 @@ func (r *Runtime) ListInstances(userID string) ([]*Instance, error) {
 
 		ec2Client, err := r.EC2ForRegion(region)
 		if err != nil {
-			return nil, err
+			regionErrs = append(regionErrs, fmt.Errorf("region %s (%d %s skipped): %w", region, len(regionRecords), boxWord(len(regionRecords)), err))
+			continue
 		}
 
 		resp, err := ec2Client.DescribeInstances(ctx, &ec2.DescribeInstancesInput{
@@ -114,7 +117,8 @@ func (r *Runtime) ListInstances(userID string) ([]*Instance, error) {
 			},
 		})
 		if err != nil {
-			return nil, awsclient.WrapError("describe instances", err)
+			regionErrs = append(regionErrs, fmt.Errorf("region %s (%d %s skipped): %w", region, len(regionRecords), boxWord(len(regionRecords)), awsclient.WrapError("describe instances", err)))
+			continue
 		}
 
 		found := make(map[string]types.Instance)
@@ -163,7 +167,14 @@ func (r *Runtime) ListInstances(userID string) ([]*Instance, error) {
 		}
 	}
 
-	return instances, nil
+	return instances, errors.Join(regionErrs...)
+}
+
+func boxWord(n int) string {
+	if n == 1 {
+		return "box"
+	}
+	return "boxes"
 }
 
 func regionForRecord(record localDb.InstanceRecord, defaultRegion string) string {

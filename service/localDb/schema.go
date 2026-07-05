@@ -29,6 +29,8 @@ var createTables = []string{
   user_id    TEXT NOT NULL REFERENCES users(id),
   box_id     TEXT REFERENCES instances(id) ON DELETE SET NULL,
   state      TEXT,
+  region     TEXT,
+  provider   TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`,
 	`CREATE INDEX IF NOT EXISTS idx_snapshots_box ON snapshots(box_id)`,

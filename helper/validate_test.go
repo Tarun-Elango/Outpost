@@ -330,7 +330,7 @@ func TestResolveSnapshotTarget(t *testing.T) {
 		name  = "before-upgrade"
 	)
 
-	if err := rt.DB().InsertSnapshot("snap-1", amiID, name, service.LocalUserID, "", "pending"); err != nil {
+	if err := rt.DB().InsertSnapshot("snap-1", amiID, name, service.LocalUserID, "", "pending", "us-east-1", "aws"); err != nil {
 		t.Fatalf("insert snapshot: %v", err)
 	}
 	t.Cleanup(func() {
