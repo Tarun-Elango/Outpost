@@ -53,7 +53,7 @@ func (r *Runtime) ResizeInstance(instanceID, userID, newInstanceType string, new
 		return nil, fmt.Errorf("box is %s, not stopped; stop it before resizing", current.Status)
 	}
 
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.EC2ForInstance(instanceID) // get ec2 client for the instance
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (r *Runtime) getRootVolumeFromAWS(inst types.Instance) (*types.Volume, erro
 		return nil, fmt.Errorf("root volume not found for instance %s", aws.ToString(inst.InstanceId))
 	}
 
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.EC2ForInstance(aws.ToString(inst.InstanceId)) // get ec2 client for the instance
 	if err != nil {
 		return nil, err
 	}

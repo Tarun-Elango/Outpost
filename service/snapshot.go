@@ -9,14 +9,19 @@ import (
 	"github.com/google/uuid"
 
 	awsclient "devbox-cli/service/aws"
+	localDb "devbox-cli/service/localDb"
 )
 
-// Snapshot mirrors lighthouse SnapshotDto (amiId, name, state, boxAwsId).
+// Snapshot mirrors lighthouse SnapshotDto (amiId, name, state, boxAwsId), plus
+// region/provider captured at creation time so the snapshot remains addressable
+// even after its source box is deleted.
 type Snapshot struct {
 	AmiID    string `json:"amiId"`
 	Name     string `json:"name"`
 	State    string `json:"state"`
 	BoxAwsID string `json:"boxAwsId"`
+	Region   string `json:"region"`
+	Provider string `json:"provider"`
 }
 
 // CreateSnapshot creates an AMI snapshot of the given box.
@@ -37,7 +42,15 @@ func (r *Runtime) CreateSnapshot(boxID, name, userID string) (*Snapshot, error) 
 		return nil, fmt.Errorf("cannot snapshot a %s instance: %s", instance.Status, boxID)
 	}
 
-	ec2Client, err := r.EC2()
+	// Capture the box's region/provider on the snapshot itself so it stays
+	// addressable even if the source box is later deleted.
+	region := instance.Region
+	provider := instance.Provider
+	if provider == "" {
+		provider = ProviderForRegion(region)
+	}
+
+	ec2Client, err := r.EC2ForRegion(region) // get ec2 client scoped to the box's region
 	if err != nil {
 		return nil, err
 	}
@@ -61,6 +74,8 @@ func (r *Runtime) CreateSnapshot(boxID, name, userID string) (*Snapshot, error) 
 		userID,
 		box.ID,
 		"pending",
+		region,
+		provider,
 	); err != nil {
 		return nil, err
 	}
@@ -70,6 +85,8 @@ func (r *Runtime) CreateSnapshot(boxID, name, userID string) (*Snapshot, error) 
 		Name:     name,
 		State:    "pending",
 		BoxAwsID: boxID,
+		Region:   region,
+		Provider: provider,
 	}, nil
 }
 
@@ -86,28 +103,32 @@ func (r *Runtime) ListSnapshots(userID string) ([]*Snapshot, error) {
 		return nil, nil
 	}
 
-	amiIDs := make([]string, len(records))
-	for i, rec := range records {
-		amiIDs[i] = rec.AmiID
-	}
-
-	ec2Client, err := r.EC2()
-	if err != nil {
-		return nil, err
+	amiIDsByRegion := make(map[string][]string)
+	for _, rec := range records {
+		region, err := r.regionForSnapshotRecord(rec)
+		if err != nil {
+			return nil, err
+		}
+		amiIDsByRegion[region] = append(amiIDsByRegion[region], rec.AmiID)
 	}
 
 	ctx := r.Context()
-	resp, err := ec2Client.DescribeImages(ctx, &ec2.DescribeImagesInput{
-		Owners:   []string{"self"},
-		ImageIds: amiIDs,
-	})
-	if err != nil {
-		return nil, awsclient.WrapError("describe images", err)
-	}
-
-	stateByAmiID := make(map[string]string, len(resp.Images))
-	for _, img := range resp.Images {
-		stateByAmiID[aws.ToString(img.ImageId)] = string(img.State)
+	stateByAmiID := make(map[string]string, len(records))
+	for region, amiIDs := range amiIDsByRegion {
+		ec2Client, err := r.EC2ForRegion(region)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := ec2Client.DescribeImages(ctx, &ec2.DescribeImagesInput{
+			Owners:   []string{"self"},
+			ImageIds: amiIDs,
+		})
+		if err != nil {
+			return nil, awsclient.WrapError("describe images", err)
+		}
+		for _, img := range resp.Images {
+			stateByAmiID[aws.ToString(img.ImageId)] = string(img.State)
+		}
 	}
 
 	for _, record := range records {
@@ -149,11 +170,18 @@ func (r *Runtime) ListSnapshots(userID string) ([]*Snapshot, error) {
 		if rec.BoxAwsID.Valid {
 			boxAwsID = rec.BoxAwsID.String
 		}
+		region, err := r.regionForSnapshotRecord(rec.SnapshotRecord) // region for the snapshot
+		if err != nil {
+			return nil, err
+		}
+		provider := providerForSnapshotRecord(rec.SnapshotRecord, region)
 		snapshots = append(snapshots, &Snapshot{
 			AmiID:    rec.AmiID,
 			Name:     rec.Name,
 			State:    state,
 			BoxAwsID: boxAwsID,
+			Region:   region,
+			Provider: provider,
 		})
 	}
 
@@ -172,7 +200,7 @@ func (r *Runtime) GetSnapshot(amiID, userID string) (*Snapshot, error) {
 		return nil, err
 	}
 
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.ec2ForSnapshotRecord(*record)
 	if err != nil {
 		return nil, err
 	}
@@ -213,11 +241,19 @@ func (r *Runtime) GetSnapshot(amiID, userID string) (*Snapshot, error) {
 		}
 	}
 
+	region, err := r.regionForSnapshotRecord(*record)
+	if err != nil {
+		return nil, err
+	}
+	provider := providerForSnapshotRecord(*record, region)
+
 	return &Snapshot{
 		AmiID:    record.AmiID,
 		Name:     record.Name,
 		State:    awsState,
 		BoxAwsID: boxAwsID,
+		Region:   region,
+		Provider: provider,
 	}, nil
 }
 
@@ -226,7 +262,7 @@ func (r *Runtime) GetSnapshot(amiID, userID string) (*Snapshot, error) {
 func (r *Runtime) DeleteSnapshot(amiID, userID string) error {
 	db := r.DB()
 
-	_, err := db.GetSnapshotByAmiIDAndUserID(amiID, userID) // check if snapshot exists for user
+	record, err := db.GetSnapshotByAmiIDAndUserID(amiID, userID) // check if snapshot exists for user
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("snapshot not found: %s", amiID)
 	}
@@ -234,7 +270,7 @@ func (r *Runtime) DeleteSnapshot(amiID, userID string) error {
 		return err
 	}
 
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.ec2ForSnapshotRecord(*record)
 	if err != nil {
 		return err
 	}
@@ -270,4 +306,51 @@ func (r *Runtime) DeleteSnapshot(amiID, userID string) error {
 	}
 
 	return db.DeleteSnapshotByAmiID(amiID) // delete snapshot from local db
+}
+
+func (r *Runtime) regionForSnapshotRecord(record localDb.SnapshotRecord) (string, error) {
+	// The snapshot's own stored region is authoritative; it survives box deletion.
+	if record.Region.Valid && record.Region.String != "" {
+		return record.Region.String, nil
+	}
+
+	// if the snapshot has a box id, get the region for the box
+	if record.BoxID.Valid && record.BoxID.String != "" {
+		box, err := r.DB().GetInstanceByID(record.BoxID.String)
+		if err == nil {
+			cfg, err := awsclient.LoadConfig()
+			if err != nil {
+				return "", err
+			}
+			return regionForRecord(*box, cfg.AwsRegion), nil
+		}
+		if err != sql.ErrNoRows {
+			return "", err
+		}
+	}
+
+	cfg, err := awsclient.LoadConfig()
+	if err != nil {
+		return "", err
+	}
+	if cfg.AwsRegion == "" {
+		return "", fmt.Errorf("aws region is required; run: devbox setup")
+	}
+	return cfg.AwsRegion, nil
+}
+
+// providerForSnapshotRecord returns the provider for the snapshot record.
+func providerForSnapshotRecord(record localDb.SnapshotRecord, region string) string {
+	if record.Provider.Valid && record.Provider.String != "" {
+		return record.Provider.String
+	}
+	return ProviderForRegion(region)
+}
+
+func (r *Runtime) ec2ForSnapshotRecord(record localDb.SnapshotRecord) (*ec2.Client, error) {
+	region, err := r.regionForSnapshotRecord(record)
+	if err != nil {
+		return nil, err
+	}
+	return r.EC2ForRegion(region)
 }

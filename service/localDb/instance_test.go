@@ -8,6 +8,11 @@ import (
 	"devbox-cli/internal/sqliteutil"
 )
 
+const (
+	testRegion   = "us-east-1"
+	testProvider = "aws"
+)
+
 func newTestDB(t *testing.T) *DB {
 	t.Helper()
 
@@ -45,7 +50,7 @@ func insertLegacyInstance(t *testing.T, db *DB, id, awsInstanceID, name string) 
 func TestResolveInstanceByNameOrAwsInstanceID(t *testing.T) {
 	db := newTestDB(t)
 
-	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro"); err != nil {
+	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro", testRegion, testProvider); err != nil {
 		t.Fatalf("insert instance: %v", err)
 	}
 
@@ -84,7 +89,7 @@ func TestResolveInstanceByNameOrAwsInstanceIDPrefersIDOverName(t *testing.T) {
 func TestInsertInstanceRejectsEC2InstanceIDShapedName(t *testing.T) {
 	db := newTestDB(t)
 
-	err := db.InsertInstance("box-1", "i-1234567890abcdef0", "i-abcdef01234567890", LocalUserID, "running", "t3.micro")
+	err := db.InsertInstance("box-1", "i-1234567890abcdef0", "i-abcdef01234567890", LocalUserID, "running", "t3.micro", testRegion, testProvider)
 	if err == nil {
 		t.Fatal("expected EC2 instance ID-shaped name error")
 	}
@@ -96,7 +101,7 @@ func TestInsertInstanceRejectsEC2InstanceIDShapedName(t *testing.T) {
 func TestInsertInstanceTrimsNameBeforePersisting(t *testing.T) {
 	db := newTestDB(t)
 
-	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", " alpha ", LocalUserID, "running", "t3.micro"); err != nil {
+	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", " alpha ", LocalUserID, "running", "t3.micro", testRegion, testProvider); err != nil {
 		t.Fatalf("insert instance: %v", err)
 	}
 
@@ -112,7 +117,7 @@ func TestInsertInstanceTrimsNameBeforePersisting(t *testing.T) {
 func TestInsertInstanceRejectsBlankNameAfterTrim(t *testing.T) {
 	db := newTestDB(t)
 
-	err := db.InsertInstance("box-1", "i-1234567890abcdef0", " \t\n ", LocalUserID, "running", "t3.micro")
+	err := db.InsertInstance("box-1", "i-1234567890abcdef0", " \t\n ", LocalUserID, "running", "t3.micro", testRegion, testProvider)
 	if err == nil {
 		t.Fatal("expected blank name error")
 	}
@@ -124,11 +129,11 @@ func TestInsertInstanceRejectsBlankNameAfterTrim(t *testing.T) {
 func TestInsertInstanceDuplicateNameError(t *testing.T) {
 	db := newTestDB(t)
 
-	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro"); err != nil {
+	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro", testRegion, testProvider); err != nil {
 		t.Fatalf("insert first instance: %v", err)
 	}
 
-	err := db.InsertInstance("box-2", "i-abcdef01234567890", "alpha", LocalUserID, "running", "t3.micro")
+	err := db.InsertInstance("box-2", "i-abcdef01234567890", "alpha", LocalUserID, "running", "t3.micro", testRegion, testProvider)
 	if err == nil {
 		t.Fatal("expected duplicate name error")
 	}
@@ -140,7 +145,7 @@ func TestInsertInstanceDuplicateNameError(t *testing.T) {
 func TestValidateInstanceNameAvailableRejectsDuplicateName(t *testing.T) {
 	db := newTestDB(t)
 
-	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro"); err != nil {
+	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro", testRegion, testProvider); err != nil {
 		t.Fatalf("insert instance: %v", err)
 	}
 
@@ -156,7 +161,7 @@ func TestValidateInstanceNameAvailableRejectsDuplicateName(t *testing.T) {
 func TestValidateInstanceNameAvailableForRenameAllowsCurrentBoxName(t *testing.T) {
 	db := newTestDB(t)
 
-	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro"); err != nil {
+	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro", testRegion, testProvider); err != nil {
 		t.Fatalf("insert instance: %v", err)
 	}
 
@@ -168,10 +173,10 @@ func TestValidateInstanceNameAvailableForRenameAllowsCurrentBoxName(t *testing.T
 func TestValidateInstanceNameAvailableForRenameRejectsAnotherBoxName(t *testing.T) {
 	db := newTestDB(t)
 
-	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro"); err != nil {
+	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro", testRegion, testProvider); err != nil {
 		t.Fatalf("insert first instance: %v", err)
 	}
-	if err := db.InsertInstance("box-2", "i-abcdef01234567890", "beta", LocalUserID, "running", "t3.micro"); err != nil {
+	if err := db.InsertInstance("box-2", "i-abcdef01234567890", "beta", LocalUserID, "running", "t3.micro", testRegion, testProvider); err != nil {
 		t.Fatalf("insert second instance: %v", err)
 	}
 
@@ -187,7 +192,7 @@ func TestValidateInstanceNameAvailableForRenameRejectsAnotherBoxName(t *testing.
 func TestUpdateInstanceNamePersistsTrimmedName(t *testing.T) {
 	db := newTestDB(t)
 
-	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro"); err != nil {
+	if err := db.InsertInstance("box-1", "i-1234567890abcdef0", "alpha", LocalUserID, "running", "t3.micro", testRegion, testProvider); err != nil {
 		t.Fatalf("insert instance: %v", err)
 	}
 

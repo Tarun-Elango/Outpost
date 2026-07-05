@@ -14,6 +14,8 @@ var createTables = []string{
   ip_address       TEXT,
   status           TEXT NOT NULL DEFAULT 'pending',
   instance_type    TEXT,
+  region           TEXT,
+  provider         TEXT,
   idle_stop_minutes  INTEGER,   -- NULL = off
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at       TEXT
@@ -27,6 +29,8 @@ var createTables = []string{
   user_id    TEXT NOT NULL REFERENCES users(id),
   box_id     TEXT REFERENCES instances(id) ON DELETE SET NULL,
   state      TEXT,
+  region     TEXT,
+  provider   TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`,
 	`CREATE INDEX IF NOT EXISTS idx_snapshots_box ON snapshots(box_id)`,

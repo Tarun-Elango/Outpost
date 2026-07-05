@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -39,6 +40,8 @@ type Instance struct {
 	InstanceType     string
 	IPAddress        string
 	PrivateIPAddress string
+	Region           string
+	Provider         string
 }
 
 // SSHHost returns the public IP if set, otherwise the private IP.
@@ -77,80 +80,139 @@ func (r *Runtime) ListInstances(userID string) ([]*Instance, error) {
 		return nil, nil
 	}
 
-	awsIDs := make([]string, len(records))
-	for i, record := range records {
-		awsIDs[i] = record.AwsInstanceID
-	}
-
-	ec2Client, err := r.EC2()
+	cfg, err := awsclient.LoadConfig()
 	if err != nil {
 		return nil, err
 	}
+	defaultRegion := cfg.AwsRegion // default region for the user from the config
+
+	byRegion := make(map[string][]localDb.InstanceRecord)
+	for _, record := range records {
+		region := regionForRecord(record, defaultRegion)
+		byRegion[region] = append(byRegion[region], record)
+	}
 
 	ctx := r.Context()
-	// get the instances from aws for the given instance ids
-	resp, err := ec2Client.DescribeInstances(ctx, &ec2.DescribeInstancesInput{
-		Filters: []types.Filter{
-			{
-				Name:   aws.String("instance-id"),
-				Values: awsIDs,
-			},
-		},
-	})
-	if err != nil {
-		return nil, awsclient.WrapError("describe instances", err)
-	}
+	instances := make([]*Instance, 0, len(records))
+	var regionErrs []error
 
-	// aws instance id -> instance object from aws response
-	found := make(map[string]types.Instance)
-	for _, reservation := range resp.Reservations {
-		for _, inst := range reservation.Instances {
-			found[aws.ToString(inst.InstanceId)] = inst
+	for region, regionRecords := range byRegion {
+		awsIDs := make([]string, len(regionRecords))
+		for i, record := range regionRecords {
+			awsIDs[i] = record.AwsInstanceID
 		}
-	}
 
-	instances := make([]*Instance, 0, len(found))
-
-	// single pass over the local db records: rows missing from aws are stale
-	// and get deleted, rows still present in aws get synced if outdated
-	for _, record := range records {
-		inst, ok := found[record.AwsInstanceID]
-		if !ok {
-			if err := db.DeleteInstanceByAwsInstanceID(record.AwsInstanceID); err != nil {
-				return nil, err
-			}
-			_ = DeleteHost(record.Name)
+		ec2Client, err := r.EC2ForRegion(region)
+		if err != nil {
+			regionErrs = append(regionErrs, fmt.Errorf("region %s (%d %s skipped): %w", region, len(regionRecords), boxWord(len(regionRecords)), err))
 			continue
 		}
 
-		dto := instanceFromAWS(inst) // convert aws instance to custom Instance struct
-		ip := dto.IPAddress
-		if ip == "" {
-			ip = dto.PrivateIPAddress
+		resp, err := ec2Client.DescribeInstances(ctx, &ec2.DescribeInstancesInput{
+			Filters: []types.Filter{
+				{
+					Name:   aws.String("instance-id"),
+					Values: awsIDs,
+				},
+			},
+		})
+		if err != nil {
+			regionErrs = append(regionErrs, fmt.Errorf("region %s (%d %s skipped): %w", region, len(regionRecords), boxWord(len(regionRecords)), awsclient.WrapError("describe instances", err)))
+			continue
 		}
 
-		if record.NeedsAWSSync(dto.Status, ip, dto.InstanceType, dto.Name) {
-			if err := db.SyncInstanceFromAWS(
-				dto.ID,
-				dto.Status,
-				ip,
-				dto.InstanceType,
-				dto.Name,
-			); err != nil {
-				return nil, err
+		found := make(map[string]types.Instance)
+		for _, reservation := range resp.Reservations {
+			for _, inst := range reservation.Instances {
+				found[aws.ToString(inst.InstanceId)] = inst
+			}
+		}
+
+		for _, record := range regionRecords {
+			inst, ok := found[record.AwsInstanceID]
+			if !ok {
+				if err := db.DeleteInstanceByAwsInstanceID(record.AwsInstanceID); err != nil {
+					return nil, err
+				}
+				_ = DeleteHost(record.Name)
+				continue
 			}
 
-			// if we are syncing the aws instance to db, then update the ssh config in case the ip address has changed
-			if ip != "" {
-				if err := syncSSHHostIP(record.Name, ip); err != nil {
-					return nil, fmt.Errorf("update SSH config for %q: %w", record.Name, err)
+			dto := instanceFromAWS(inst)
+			dto.Region = region
+			dto.Provider = providerForRecord(record, region) // provider for the region
+			ip := dto.IPAddress
+			if ip == "" {
+				ip = dto.PrivateIPAddress
+			}
+
+			if record.NeedsAWSSync(dto.Status, ip, dto.InstanceType, dto.Name) {
+				if err := db.SyncInstanceFromAWS(
+					dto.ID,
+					dto.Status,
+					ip,
+					dto.InstanceType,
+					dto.Name,
+				); err != nil {
+					return nil, err
+				}
+
+				if ip != "" {
+					if err := syncSSHHostIP(record.Name, ip); err != nil {
+						return nil, fmt.Errorf("update SSH config for %q: %w", record.Name, err)
+					}
 				}
 			}
+			instances = append(instances, dto)
 		}
-		instances = append(instances, dto)
 	}
 
-	return instances, nil
+	return instances, errors.Join(regionErrs...)
+}
+
+func boxWord(n int) string {
+	if n == 1 {
+		return "box"
+	}
+	return "boxes"
+}
+
+func regionForRecord(record localDb.InstanceRecord, defaultRegion string) string {
+	if record.Region.Valid && record.Region.String != "" {
+		return record.Region.String
+	}
+	return defaultRegion
+}
+
+func providerForRecord(record localDb.InstanceRecord, region string) string {
+	if record.Provider.Valid && record.Provider.String != "" {
+		return record.Provider.String
+	}
+	return ProviderForRegion(region)
+}
+
+// EC2ForInstance returns an EC2 client scoped to the box's stored AWS region.
+func (r *Runtime) EC2ForInstance(awsInstanceID string) (*ec2.Client, error) {
+	region, err := r.regionForAwsInstanceID(awsInstanceID) // region for the instance id
+	if err != nil {
+		return nil, err
+	}
+	return r.EC2ForRegion(region)
+}
+
+func (r *Runtime) regionForAwsInstanceID(awsInstanceID string) (string, error) {
+	cfg, err := awsclient.LoadConfig()
+	if err != nil {
+		return "", err
+	}
+	record, err := r.DB().GetInstanceByAwsInstanceID(awsInstanceID)
+	if err == sql.ErrNoRows {
+		return cfg.AwsRegion, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return regionForRecord(*record, cfg.AwsRegion), nil
 }
 
 // convert to custom Instance struct, originall from aws struct
@@ -308,6 +370,11 @@ func (r *Runtime) createInstanceWithStartupScripts(name, publicKey, snapshotAmiI
 	launched := resp.Instances[0]
 	awsInstanceID := aws.ToString(launched.InstanceId)
 
+	appCfg, err := awsclient.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+
 	if err := db.InsertInstance(
 		uuid.New().String(),
 		awsInstanceID,
@@ -315,6 +382,8 @@ func (r *Runtime) createInstanceWithStartupScripts(name, publicKey, snapshotAmiI
 		userID,
 		string(launched.State.Name),
 		string(launched.InstanceType),
+		appCfg.AwsRegion,
+		ProviderForRegion(appCfg.AwsRegion),
 	); err != nil {
 		// if the instance cannot be added to the database, terminate it
 		_, termErr := ec2Client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
@@ -330,7 +399,9 @@ func (r *Runtime) createInstanceWithStartupScripts(name, publicKey, snapshotAmiI
 	}
 
 	// upon successful creation, add the host to the ssh config
-	dto := instanceFromAWS(launched) // convert the aws instance to a custom Instance struct
+	dto := instanceFromAWS(launched)
+	dto.Region = appCfg.AwsRegion
+	dto.Provider = ProviderForRegion(appCfg.AwsRegion)
 	if ip, err := dto.SSHHost(); err == nil {
 		if err := AddHost(name, ip); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: box created but failed to update SSH config: %v\n", err)
@@ -475,11 +546,27 @@ func (r *Runtime) getInstanceFromAWS(instanceId string) (*Instance, error) {
 	if err != nil {
 		return nil, err
 	}
-	return instanceFromAWS(inst), nil
+	dto := instanceFromAWS(inst)
+
+	cfg, err := awsclient.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	record, err := r.DB().GetInstanceByAwsInstanceID(instanceId)
+	if err == nil {
+		dto.Region = regionForRecord(*record, cfg.AwsRegion)
+		dto.Provider = providerForRecord(*record, dto.Region)
+	} else if err != sql.ErrNoRows {
+		return nil, err
+	} else {
+		dto.Region = cfg.AwsRegion
+		dto.Provider = ProviderForRegion(cfg.AwsRegion)
+	}
+	return dto, nil
 }
 
 func (r *Runtime) describeInstanceFromAWS(instanceId string) (types.Instance, error) {
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.EC2ForInstance(instanceId)
 	if err != nil {
 		return types.Instance{}, err
 	}
@@ -541,7 +628,7 @@ func (r *Runtime) RenameInstance(instanceID, userID, newName string) (*Instance,
 		return nil, err
 	}
 
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.EC2ForInstance(instanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -602,7 +689,7 @@ func (r *Runtime) DeleteInstance(instanceID, userID string) error {
 		return err
 	}
 
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.EC2ForInstance(instanceID)
 	if err != nil {
 		return err
 	}
@@ -637,7 +724,7 @@ func (r *Runtime) StopInstance(instanceID, userID string) error {
 		return err
 	}
 
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.EC2ForInstance(instanceID)
 	if err != nil {
 		return err
 	}
@@ -674,7 +761,7 @@ func (r *Runtime) StartInstance(instanceID, userID string) error {
 		return fmt.Errorf("box is %s, not stopped, or still stopping. ", instance.Status)
 	}
 
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.EC2ForInstance(instanceID)
 	if err != nil {
 		return err
 	}
@@ -716,7 +803,7 @@ func (r *Runtime) RebootInstance(instanceID, userID string) error {
 		return err
 	}
 
-	ec2Client, err := r.EC2()
+	ec2Client, err := r.EC2ForInstance(instanceID)
 	if err != nil {
 		return err
 	}

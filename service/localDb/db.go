@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"devbox-cli/internal/backup"
+	"devbox-cli/internal/config"
 	"devbox-cli/internal/sqliteutil"
 )
 
@@ -84,9 +86,109 @@ func (db *DB) migrate() error {
 			return fmt.Errorf("migrate: %w", err)
 		}
 	}
-	// CREATE TABLE IF NOT EXISTS does not alter existing tables; upgrade old DBs once.
-	//return db.migrateSnapshotsBoxFK()
+	if err := db.migrateInstancesRegionProvider(); err != nil {
+		return err
+	}
+	return db.migrateSnapshotsRegionProvider()
+}
+
+// one time migration to add region and provider columns to instances table
+func (db *DB) migrateInstancesRegionProvider() error {
+	cols, err := db.tableColumns("instances")
+	if err != nil {
+		return err
+	}
+	if !cols["region"] {
+		if _, err := db.conn.Exec(`ALTER TABLE instances ADD COLUMN region TEXT`); err != nil && !isDuplicateColumnError(err, "region") {
+			return fmt.Errorf("migrate instances region: %w", err)
+		}
+	}
+	if !cols["provider"] {
+		if _, err := db.conn.Exec(`ALTER TABLE instances ADD COLUMN provider TEXT`); err != nil && !isDuplicateColumnError(err, "provider") {
+			return fmt.Errorf("migrate instances provider: %w", err)
+		}
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("migrate instances region/provider backfill: %w", err)
+	}
+	defaultRegion := cfg.AwsRegion
+	_, err = db.conn.Exec(`
+		UPDATE instances
+		SET region = COALESCE(NULLIF(region, ''), ?),
+		    provider = COALESCE(NULLIF(provider, ''), 'aws')
+		WHERE region IS NULL OR region = '' OR provider IS NULL OR provider = ''`,
+		defaultRegion,
+	)
+	if err != nil {
+		return fmt.Errorf("migrate instances region/provider backfill: %w", err)
+	}
 	return nil
+}
+
+// one time migration to add region and provider columns to snapshots table.
+// Snapshots used to derive their region solely from the source box, which
+// breaks once the box is deleted; storing region/provider on the snapshot
+// itself keeps it independently addressable.
+func (db *DB) migrateSnapshotsRegionProvider() error {
+	cols, err := db.tableColumns("snapshots")
+	if err != nil {
+		return err
+	}
+	if !cols["region"] {
+		if _, err := db.conn.Exec(`ALTER TABLE snapshots ADD COLUMN region TEXT`); err != nil && !isDuplicateColumnError(err, "region") {
+			return fmt.Errorf("migrate snapshots region: %w", err)
+		}
+	}
+	if !cols["provider"] {
+		if _, err := db.conn.Exec(`ALTER TABLE snapshots ADD COLUMN provider TEXT`); err != nil && !isDuplicateColumnError(err, "provider") {
+			return fmt.Errorf("migrate snapshots provider: %w", err)
+		}
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("migrate snapshots region/provider backfill: %w", err)
+	}
+	defaultRegion := cfg.AwsRegion
+	_, err = db.conn.Exec(`
+		UPDATE snapshots
+		SET region = COALESCE(NULLIF(region, ''), (SELECT region FROM instances WHERE instances.id = snapshots.box_id), NULLIF(?, '')),
+		    provider = COALESCE(NULLIF(provider, ''), (SELECT provider FROM instances WHERE instances.id = snapshots.box_id), 'aws')
+		WHERE region IS NULL OR region = '' OR provider IS NULL OR provider = ''`,
+		defaultRegion,
+	)
+	if err != nil {
+		return fmt.Errorf("migrate snapshots region/provider backfill: %w", err)
+	}
+	return nil
+}
+
+func isDuplicateColumnError(err error, column string) bool {
+	return err != nil && strings.Contains(err.Error(), "duplicate column name: "+column)
+}
+
+// returns the list of columns in the table
+func (db *DB) tableColumns(table string) (map[string]bool, error) {
+	rows, err := db.conn.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return nil, fmt.Errorf("inspect %s schema: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	cols := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
+			return nil, fmt.Errorf("scan %s column: %w", table, err)
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
 }
 
 // func (db *DB) migrateSnapshotsBoxFK() error {

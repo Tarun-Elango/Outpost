@@ -19,13 +19,40 @@ type InstanceRecord struct {
 	IPAddress       sql.NullString
 	Status          string
 	InstanceType    sql.NullString
+	Region          sql.NullString
+	Provider        sql.NullString
 	IdleStopMinutes sql.NullInt64 // NULL = off
+}
+
+const instanceSelectColumns = `id, aws_instance_id, name, user_id, ip_address, status, instance_type, region, provider, idle_stop_minutes`
+
+// scanInstanceRecord scans a row from the instances table into an InstanceRecord.
+func scanInstanceRecord(scanner interface {
+	Scan(dest ...any) error
+}) (*InstanceRecord, error) {
+	var r InstanceRecord
+	err := scanner.Scan(
+		&r.ID,
+		&r.AwsInstanceID,
+		&r.Name,
+		&r.UserID,
+		&r.IPAddress,
+		&r.Status,
+		&r.InstanceType,
+		&r.Region,
+		&r.Provider,
+		&r.IdleStopMinutes,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 // ListInstancesByUserID returns all instances owned by userID.
 func (db *DB) ListInstancesByUserID(userID string) ([]InstanceRecord, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, aws_instance_id, name, user_id, ip_address, status, instance_type, idle_stop_minutes
+		SELECT `+instanceSelectColumns+`
 		FROM instances
 		WHERE user_id = ?
 		ORDER BY created_at`,
@@ -38,96 +65,60 @@ func (db *DB) ListInstancesByUserID(userID string) ([]InstanceRecord, error) {
 
 	var records []InstanceRecord
 	for rows.Next() {
-		var r InstanceRecord
-		if err := rows.Scan(
-			&r.ID,
-			&r.AwsInstanceID,
-			&r.Name,
-			&r.UserID,
-			&r.IPAddress,
-			&r.Status,
-			&r.InstanceType,
-			&r.IdleStopMinutes,
-		); err != nil {
+		r, err := scanInstanceRecord(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan instance: %w", err)
 		}
-		records = append(records, r)
+		records = append(records, *r)
 	}
 	return records, rows.Err()
 }
 
 // GetInstanceByID returns the instance row for internal id, or sql.ErrNoRows if not found.
 func (db *DB) GetInstanceByID(id string) (*InstanceRecord, error) {
-	var r InstanceRecord
-	err := db.conn.QueryRow(`
-		SELECT id, aws_instance_id, name, user_id, ip_address, status, instance_type, idle_stop_minutes
+	row := db.conn.QueryRow(`
+		SELECT `+instanceSelectColumns+`
 		FROM instances
 		WHERE id = ?`,
 		id,
-	).Scan(
-		&r.ID,
-		&r.AwsInstanceID,
-		&r.Name,
-		&r.UserID,
-		&r.IPAddress,
-		&r.Status,
-		&r.InstanceType,
-		&r.IdleStopMinutes,
 	)
-	if err != nil {
-		return nil, err
-	}
-	return &r, nil
+	return scanInstanceRecord(row)
 }
 
 // GetInstanceByAwsInstanceIDAndUserID returns the instance row for awsInstanceID
 // owned by userID, or sql.ErrNoRows if not found.
 func (db *DB) GetInstanceByAwsInstanceIDAndUserID(awsInstanceID, userID string) (*InstanceRecord, error) {
-	var r InstanceRecord
-	err := db.conn.QueryRow(`
-		SELECT id, aws_instance_id, name, user_id, ip_address, status, instance_type, idle_stop_minutes
+	row := db.conn.QueryRow(`
+		SELECT `+instanceSelectColumns+`
 		FROM instances
 		WHERE aws_instance_id = ? AND user_id = ?`,
 		awsInstanceID, userID,
-	).Scan(
-		&r.ID,
-		&r.AwsInstanceID,
-		&r.Name,
-		&r.UserID,
-		&r.IPAddress,
-		&r.Status,
-		&r.InstanceType,
-		&r.IdleStopMinutes,
 	)
-	if err != nil {
-		return nil, err
-	}
-	return &r, nil
+	return scanInstanceRecord(row)
+}
+
+// GetInstanceByAwsInstanceID returns the instance row for awsInstanceID,
+// or sql.ErrNoRows if not found.
+func (db *DB) GetInstanceByAwsInstanceID(awsInstanceID string) (*InstanceRecord, error) {
+	row := db.conn.QueryRow(`
+		SELECT `+instanceSelectColumns+`
+		FROM instances
+		WHERE aws_instance_id = ?`,
+		awsInstanceID,
+	)
+	return scanInstanceRecord(row)
 }
 
 // GetInstanceByNameAndUserID returns the instance row for name owned by userID,
 // or sql.ErrNoRows if not found.
 func (db *DB) GetInstanceByNameAndUserID(name, userID string) (*InstanceRecord, error) {
-	var r InstanceRecord
-	err := db.conn.QueryRow(`
-		SELECT id, aws_instance_id, name, user_id, ip_address, status, instance_type, idle_stop_minutes
+	row := db.conn.QueryRow(`
+		SELECT `+instanceSelectColumns+`
 		FROM instances
 		WHERE name = ? AND user_id = ?`,
 		name, userID,
-	).Scan(
-		&r.ID,
-		&r.AwsInstanceID,
-		&r.Name,
-		&r.UserID,
-		&r.IPAddress,
-		&r.Status,
-		&r.InstanceType,
-		&r.IdleStopMinutes,
 	)
-	if err != nil {
-		return nil, err
-	}
-	return &r, nil
+	return scanInstanceRecord(row)
 }
 
 // ResolveInstanceByNameOrAwsInstanceID resolves a user-provided box reference.
@@ -170,7 +161,7 @@ func (db *DB) DeleteInstanceByAwsInstanceID(awsInstanceID string) error {
 }
 
 // InsertInstance creates a new instance row owned by userID.
-func (db *DB) InsertInstance(id, awsInstanceID, name, userID, status, instanceType string) error {
+func (db *DB) InsertInstance(id, awsInstanceID, name, userID, status, instanceType, region, provider string) error {
 	name = strings.TrimSpace(name) // trim the name
 
 	// before inserting, check if the name is available, in case there is conflict/race condition
@@ -179,9 +170,9 @@ func (db *DB) InsertInstance(id, awsInstanceID, name, userID, status, instanceTy
 	}
 
 	_, err := db.conn.Exec(`
-		INSERT INTO instances (id, aws_instance_id, name, user_id, status, instance_type)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		id, awsInstanceID, name, userID, status, instanceType,
+		INSERT INTO instances (id, aws_instance_id, name, user_id, status, instance_type, region, provider)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, awsInstanceID, name, userID, status, instanceType, region, provider,
 	)
 	if err != nil {
 		// if the error is because the name already exists, return a specific error

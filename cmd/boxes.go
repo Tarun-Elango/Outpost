@@ -51,6 +51,8 @@ type Box struct {
 	InstanceType string `json:"instanceType"`
 	PublicIP     string `json:"publicIpAddress"`
 	PrivateIP    string `json:"privateIpAddress"`
+	Region       string `json:"region"`
+	Provider     string `json:"provider"`
 }
 
 func instancesToBoxes(instances []*service.Instance) []Box {
@@ -63,6 +65,8 @@ func instancesToBoxes(instances []*service.Instance) []Box {
 			InstanceType: inst.InstanceType,
 			PublicIP:     inst.IPAddress,
 			PrivateIP:    inst.PrivateIPAddress,
+			Region:       inst.Region,
+			Provider:     inst.Provider,
 		}
 	}
 	return boxes

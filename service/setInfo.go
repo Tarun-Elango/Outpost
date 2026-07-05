@@ -48,6 +48,13 @@ func AllRegions() []Region {
 	}
 }
 
+// ProviderForRegion returns the cloud provider for region.
+// Every region in AllRegions() is AWS today; extend when GCP/DO land.
+func ProviderForRegion(region string) string {
+	_ = region
+	return "aws" // for now, only AWS is supported
+}
+
 // SaveAWSCredentials stores AWS credentials and region in ~/.devbox/config.json.
 func SaveAWSCredentials(secret, accessKey, region string) error {
 	cfg, err := config.Load() // load

@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"fmt"
+
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 
 	awsclient "devbox-cli/service/aws"
@@ -16,9 +18,9 @@ type Runtime struct {
 	cancel context.CancelFunc
 	db     *localDb.DB
 
-	ec2Once sync.Once // lazy loading of the ec2 client
-	ec2     *ec2.Client
-	ec2Err  error
+	ec2Mu          sync.Mutex             // mutex for the ec2 clients, so we don't have race conditions when accessing the clients
+	ec2ByRegion    map[string]*ec2.Client // map of ec2 clients by region
+	ec2ErrByRegion map[string]error       // map of errors by region
 }
 
 // Open connects to the local database. AWS clients are created lazily on first use.
@@ -65,20 +67,40 @@ func (r *Runtime) Context() context.Context {
 	return r.ctx
 }
 
-// EC2 returns a shared EC2 client, loading AWS config on first call.
+// EC2 returns a shared EC2 client for the configured default region.
 func (r *Runtime) EC2() (*ec2.Client, error) {
-	// on first call, load the aws config and create the ec2 client
-	// on subsequent calls, return the cached client
-	r.ec2Once.Do(func() {
-		client, err := awsclient.NewClient(r.Context())
-		if err != nil {
-			r.ec2Err = err
-			return
-		}
-		r.ec2 = ec2.NewFromConfig(client.Config()) // create the ec2 client from the aws config
-	})
-	if r.ec2Err != nil {
-		return nil, r.ec2Err
+	cfg, err := awsclient.LoadConfig()
+	if err != nil {
+		return nil, err
 	}
-	return r.ec2, nil
+	if cfg.AwsRegion == "" {
+		return nil, fmt.Errorf("aws region is required; run: devbox setup")
+	}
+	return r.EC2ForRegion(cfg.AwsRegion)
+}
+
+// EC2ForRegion returns a cached EC2 client for the given AWS region.
+func (r *Runtime) EC2ForRegion(region string) (*ec2.Client, error) {
+	r.ec2Mu.Lock() // lock the mutex so we don't have race conditions when accessing the clients
+	defer r.ec2Mu.Unlock()
+
+	if r.ec2ByRegion == nil {
+		r.ec2ByRegion = make(map[string]*ec2.Client)
+		r.ec2ErrByRegion = make(map[string]error)
+	}
+	if client, ok := r.ec2ByRegion[region]; ok {
+		if err := r.ec2ErrByRegion[region]; err != nil {
+			return nil, err
+		}
+		return client, nil
+	}
+
+	awsClient, err := awsclient.NewClientForRegion(r.Context(), region)
+	if err != nil {
+		r.ec2ErrByRegion[region] = err
+		return nil, err
+	}
+	client := ec2.NewFromConfig(awsClient.Config())
+	r.ec2ByRegion[region] = client
+	return client, nil
 }

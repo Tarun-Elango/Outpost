@@ -205,8 +205,8 @@ export default function ConnectDoc() {
         </ul>
         <p className="note">
           Git identity is separate from SSH auth: on the box you may still need to set{' '}
-          <code>git config --global user.name</code> and{' '}
-          <code>git config --global user.email</code> before commits show the right author.
+          <code>git config --global user.name "Your Name"</code> and{' '}
+          <code>git config --global user.email "you@example.com"</code> before commits show the right author.
         </p>
       </div>
     </DocPage>
