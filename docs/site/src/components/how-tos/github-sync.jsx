@@ -71,6 +71,15 @@ devbox ssh mybox -- -A`}</code>
           and <code>git push</code> use your local key as usual.
         </p>
 
+        <p>
+          Git identity is separate from SSH auth. On the box, set your commit author
+          once if you have not already:
+        </p>
+        <pre>
+          <code>{`git config --global user.name "Your Name"
+git config --global user.email "you@example.com"`}</code>
+        </pre>
+
         <p>When disabling, devbox removes the key from <code>ssh-agent</code> and
           drops <code>ForwardAgent</code> from the SSH config block for that box.</p>
       </div>

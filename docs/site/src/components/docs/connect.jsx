@@ -203,6 +203,11 @@ export default function ConnectDoc() {
             forwarding for a box
           </li>
         </ul>
+        <p className="note">
+          Git identity is separate from SSH auth: on the box you may still need to set{' '}
+          <code>git config --global user.name</code> and{' '}
+          <code>git config --global user.email</code> before commits show the right author.
+        </p>
       </div>
     </DocPage>
   )
