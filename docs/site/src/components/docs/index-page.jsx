@@ -7,11 +7,6 @@ const topics = [
     description: 'Quick install, install with specific version or shared machine, github repo build.',
   },
   {
-    to: '/docs/uninstall',
-    title: 'Uninstall',
-    description: 'remove devbox, local data, and PATH entries added by install.',
-  },
-  {
     to: '/docs/setup',
     title: 'Setup',
     description:
