@@ -210,7 +210,7 @@ func budgetUpdate(args []string) {
 	}
 
 	changed := (opts.NewName != "" && opts.NewName != details.Name) ||
-		opts.NewLimitUSD != nil ||
+		(opts.NewLimitUSD != nil && *opts.NewLimitUSD != details.LimitUSD) ||
 		(opts.NewEmail != "" && opts.NewEmail != details.Email)
 	if !changed {
 		fmt.Println("No changes.")

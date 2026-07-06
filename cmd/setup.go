@@ -22,7 +22,11 @@ func Setup(args []string) {
 		setupExit(1)
 	}
 
-	fmt.Println("Setup AWS credentials. Press Enter on access key or secret to keep existing values. CTRL+C to cancel.")
+	intro := "Setup AWS credentials. Enter access key and secret. CTRL+C to cancel."
+	if existing.AwsAccessKey != "" || existing.AwsSecret != "" {
+		intro = "Setup AWS credentials. Press Enter on access key or secret to keep existing values. CTRL+C to cancel."
+	}
+	fmt.Println(intro)
 
 	accessKeyPrompt := "AWS access key: "
 	if existing.AwsAccessKey != "" {

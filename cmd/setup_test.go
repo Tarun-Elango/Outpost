@@ -167,6 +167,36 @@ func TestSetup(t *testing.T) {
 		}
 	})
 
+	t.Run("intro_prompt_no_existing_credentials", func(t *testing.T) {
+		withTestHome(t)
+		withSetupStdin(t, "\n")
+
+		out := captureStdout(t, func() {
+			_, _ = withSetupExit(t, func() { Setup(nil) })
+		})
+		if !strings.Contains(out, "Enter access key and secret") {
+			t.Fatalf("stdout = %q, want intro for new credentials", out)
+		}
+		if strings.Contains(out, "keep existing values") {
+			t.Fatalf("stdout = %q, should not mention keeping existing values", out)
+		}
+	})
+
+	t.Run("intro_prompt_with_existing_credentials", func(t *testing.T) {
+		withTestHome(t)
+		if err := service.SaveAWSCredentials("existing-secret", "existing-access", "us-east-1"); err != nil {
+			t.Fatalf("seed config: %v", err)
+		}
+		withSetupStdin(t, "\n\n1\n")
+
+		out := captureStdout(t, func() {
+			_, _ = withSetupExit(t, func() { Setup(nil) })
+		})
+		if !strings.Contains(out, "keep existing values") {
+			t.Fatalf("stdout = %q, want intro for keeping existing credentials", out)
+		}
+	})
+
 	t.Run("empty_access_key", func(t *testing.T) {
 		withTestHome(t)
 		withSetupStdin(t, "\n")

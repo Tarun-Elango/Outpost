@@ -28,7 +28,7 @@ export default function BudgetsDoc() {
         <dl className="cmd-variant">
           <dt>Refresh from AWS</dt>
           <dd>
-            <code>devbox budget --refresh</code>
+            <code>devbox budget [ls] --refresh</code>
           </dd>
           <dd className="example">
             Example: <code>devbox budget ls --refresh</code>
