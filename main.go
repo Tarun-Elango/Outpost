@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"devbox-cli/cmd"
-	"devbox-cli/internal/backup"
 )
 
 const helpTopics = "create, box, ssh, snapshot, template, idle-stop, git-sync, budget"
@@ -296,7 +295,7 @@ func showHelpTopic(topic string) {
 
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "uninstall" {
-		backup.MaybeDaily()
+		// backup.MaybeDaily()
 	}
 	if len(os.Args) < 2 {
 		usage()
