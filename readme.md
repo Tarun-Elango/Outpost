@@ -1,17 +1,15 @@
-# devbox-cli
+# Devbox CLI
 
-Manage remote dev boxes from the CLI — provision, connect, sync, and destroy them using your own cloud account (BYOK).
-
-- **Requirements:** An AWS account, Linux or macOS computer.
+Manage remote dev boxes from the CLI — provision, connect, sync, and destroy them using your own cloud account (BYOK - AWS only for now). CLI supports linux and macos.
 
 ## What is a box?
 
-A **box** is a personal dev machine on AWS — an EC2 instance running Amazon Linux that you provision, connect to, and tear down from your laptop.
+A **box** is a personal dev machine on AWS — an EC2 instance running Amazon Linux that you provision, connect to, and tear down from your local machine.
 
 ## Why was this created?
-The idea of keeping your dev environment away from your machine, keeps the blast radius small when installing any new packages or dependencies. And, it allows to have a seperate environment for AI agents to do their thing, without having to worry about our laptop. 
+The idea of keeping your dev environment away from your machine, keeps the blast radius small when installing any new packages or dependencies. Having a seperate environment for AI agents to do their thing, without having to worry about our computer. All while staying in the terminal, and keeping credentials secure locally.
 
-The tool has since been extended to support various commands like box management, snapshot management, template management allowing to spin up a box with pre-installed software, ssh, sync, idle-stop to save on costs, git-sync to sync your local git config to the box, budget tracking and more.
+The tool has since been extended with commands for box management, snapshots (save a copy of your box so you can restore it later), templates (spin up a box with pre-installed software), ssh, sync, idle-stop to save on costs, git-sync to use your local git credentials on the box, budget tracking, and more.
 
 see the docs for more details: https://devbox.tarunelango.com
 
@@ -114,10 +112,13 @@ Use your local GitHub SSH key on a box (for `git push`, `git clone`, etc.) witho
 | `git-sync <id-or-name>` | Toggle GitHub SSH agent forwarding for a box |
 
 ## Setup
+
+***Note***: the aws access key and secret are stored in the `~/.devbox/` file, locally on your machine. No cloud storage or syncing is done.
+
 Go to your AWS console 
 
 1. **create an IAM user**
-Go to the IAM console → **Users** → **Create user**. Name it (e.g. `devbox-cli`), choose **Attach policies directly**, search for `AmazonEC2FullAccess` and `AWSBudgetsReadOnlyAccess`, select it, and create the user.
+Go to the IAM console → **Users** → **Create user**. Name it (e.g. `devbox-cli`), choose **Attach policies directly**, search for `AmazonEC2FullAccess` and `AWSBudgetsActionsWithAWSResourceControlAccess`, select it, and create the user.
 
 2. **Access keys** 
 Open the user → **Security credentials** → **Access keys** → **Create access key**. Select **Local code**, confirm, then copy the **Access key ID** and **Secret access key** (the secret is shown only once).

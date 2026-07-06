@@ -168,6 +168,7 @@ func TestSetup(t *testing.T) {
 	})
 
 	t.Run("empty_access_key", func(t *testing.T) {
+		withTestHome(t)
 		withSetupStdin(t, "\n")
 
 		stderr := captureStderr(t, func() {
@@ -196,6 +197,7 @@ func TestSetup(t *testing.T) {
 	})
 
 	t.Run("empty_secret", func(t *testing.T) {
+		withTestHome(t)
 		withSetupStdin(t, "access-key\n\n")
 
 		stderr := captureStderr(t, func() {
@@ -238,8 +240,8 @@ func TestSetup(t *testing.T) {
 				t.Fatalf("exit = %v exited = %v, want exit 1", code, exited)
 			}
 		})
-		if !strings.Contains(stderr, "save config:") {
-			t.Fatalf("stderr = %q, want save config error", stderr)
+		if !strings.Contains(stderr, "load config:") && !strings.Contains(stderr, "save config:") {
+			t.Fatalf("stderr = %q, want load or save config error", stderr)
 		}
 	})
 
@@ -277,6 +279,46 @@ func TestSetup(t *testing.T) {
 		cfg := loadTestConfig(t)
 		if cfg.AwsSecret != "other-secret" || cfg.AwsAccessKey != "other-access" || cfg.AwsRegion != "us-west-2" {
 			t.Fatalf("config = %+v, want credentials saved with us-west-2", cfg)
+		}
+	})
+
+	t.Run("keeps_existing_credentials_on_empty_input", func(t *testing.T) {
+		withTestHome(t)
+		if err := service.SaveAWSCredentials("existing-secret", "existing-access", "us-east-1"); err != nil {
+			t.Fatalf("seed config: %v", err)
+		}
+		withSetupStdin(t, "\n\n1\n")
+
+		captureStdout(t, func() {
+			code, exited := withSetupExit(t, func() { Setup(nil) })
+			if exited {
+				t.Fatalf("unexpected exit %d", code)
+			}
+		})
+
+		cfg := loadTestConfig(t)
+		if cfg.AwsSecret != "existing-secret" || cfg.AwsAccessKey != "existing-access" {
+			t.Fatalf("config = %+v, want existing credentials preserved", cfg)
+		}
+	})
+
+	t.Run("updates_one_credential_keeps_other", func(t *testing.T) {
+		withTestHome(t)
+		if err := service.SaveAWSCredentials("existing-secret", "existing-access", "us-east-1"); err != nil {
+			t.Fatalf("seed config: %v", err)
+		}
+		withSetupStdin(t, "new-access\n\n1\n")
+
+		captureStdout(t, func() {
+			code, exited := withSetupExit(t, func() { Setup(nil) })
+			if exited {
+				t.Fatalf("unexpected exit %d", code)
+			}
+		})
+
+		cfg := loadTestConfig(t)
+		if cfg.AwsAccessKey != "new-access" || cfg.AwsSecret != "existing-secret" {
+			t.Fatalf("config = %+v, want updated access key with preserved secret", cfg)
 		}
 	})
 }
