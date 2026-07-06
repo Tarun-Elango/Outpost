@@ -11,7 +11,7 @@ A **box** is a personal dev machine on AWS — an EC2 instance running Amazon Li
 ## Why was this created?
 The idea of keeping your dev environment away from your machine, keeps the blast radius small when installing any new packages or dependencies. And, it allows to have a seperate environment for AI agents to do their thing, without having to worry about our laptop. 
 
-The tool has since been extended to support various commands like box management, snapshot management, template management allowing to spin up a box with pre-installed software, ssh, sync, idle-stop to save on costs, git-sync to sync your local git config to the box, and more.
+The tool has since been extended to support various commands like box management, snapshot management, template management allowing to spin up a box with pre-installed software, ssh, sync, idle-stop to save on costs, git-sync to sync your local git config to the box, budget tracking and more.
 
 see the docs for more details: https://devbox.tarunelango.com
 
@@ -80,9 +80,8 @@ A snapshot is a saved disk image of a box; restore one with `create --from`.
 
 | Command | Notes |
 | --- | --- |
-| `snapshot` | List all snapshots |
+| `snapshot [ls] [<amiId-or-name>]` | List all snapshots, or show details for one |
 | `snapshot create <id-or-name> <name>` | Create a snapshot of a box |
-| `snapshot ls <amiId-or-name>` | Show details for a snapshot |
 | `snapshot delete <amiId-or-name>` | Delete a snapshot |
 
 ### Templates
@@ -91,7 +90,7 @@ Templates let you create boxes preloaded with libs, tools, and other setup.
 
 | Command | Notes |
 | --- | --- |
-| `template` | List available templates |
+| `template [ls]` | List available templates |
 | `template new <templateName> [command string]` | Create a template with optional startup command |
 | `template delete <templateName>` | Delete a template |
 | `template rename <templateName> <new-templateName>` | Rename a template |

@@ -123,12 +123,11 @@ Commands:
   forward <id|name> <port>
                       Forward a port from a box
 
-  snapshot                              List all snapshots
+  snapshot [ls] [<amiId|name>]          List all snapshots, or show details for one
   snapshot create <id|name> <name>      Create a snapshot of a box
-  snapshot ls <amiId|name>              Show details for a snapshot
   snapshot delete <amiId|name>          Delete a snapshot
 
-  template                              List available templates
+  template [ls]                         List available templates
   template new <templateName> [command string]  Create a template with optional startup command
   template delete <templateName>                Delete a template
   template rename <templateName> <new-templateName>     Rename a template
@@ -208,9 +207,8 @@ func helpSnapshot() {
 
 A snapshot is a saved disk image of a box; restore one with create --from.
 
-  snapshot                              List all snapshots
+  snapshot [ls] [<amiId|name>]          List all snapshots, or show details for one
   snapshot create <id|name> <name>      Create a snapshot of a box
-  snapshot ls <amiId|name>              Show details for a snapshot
   snapshot delete <amiId|name>          Delete a snapshot
 `)
 }
@@ -220,7 +218,7 @@ func helpTemplate() {
 
 Templates let you create boxes preloaded with libs, tools, and other setup.
 
-  template                              List available templates
+  template [ls]                         List available templates
   template new <templateName> [command string]  Create a template with optional startup command
   template delete <templateName>                Delete a template
   template rename <templateName> <new-templateName>     Rename a template
