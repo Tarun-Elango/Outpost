@@ -73,6 +73,8 @@ func Setup(args []string) {
 		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
 		setupExit(1)
 	}
+	fmt.Println("Credentials saved to ~/.devbox/config.json.")
+	fmt.Println("Keep this folder local only — do not sync or commit it.")
 }
 
 // ClearCreds prompts for confirmation, then removes saved AWS credentials.
@@ -91,6 +93,7 @@ func ClearCreds(args []string) {
 		fmt.Fprintf(os.Stderr, "clear credentials: %v\n", err)
 		setupExit(1)
 	}
+	fmt.Println("AWS credentials cleared from ~/.devbox/config.json.")
 }
 
 // function to select region

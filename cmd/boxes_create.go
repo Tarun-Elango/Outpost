@@ -24,11 +24,10 @@ func Create(args []string) {
 		return
 	}
 
-	pubKey := ""
-	if pk, err := readPublicKey(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: %v; box will be created without your public key\n", err)
-	} else {
-		pubKey = pk
+	pubKey, err := readPublicKey()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 
 	volumeSizeGB := service.DefaultVolumeSizeGB
@@ -91,7 +90,7 @@ func Create(args []string) {
 	if fromSnapshot == "" {
 		fmt.Printf("  Storage:   %d GB\n", volumeSizeGB)
 	}
-	fmt.Printf("  SSH config: devbox-%s added to ~/.ssh/config\n", b.Name)
+	addSSHHostOrWarn(b.Name, inst)
 	if b.PublicIP != "" {
 		fmt.Printf("  Public IP: %s\n", b.PublicIP)
 	} else {

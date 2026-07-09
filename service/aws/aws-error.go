@@ -41,7 +41,7 @@ func WrapError(operation string, err error) error {
 
 // IsAuthError reports whether err is an AWS authentication failure.
 func IsAuthError(err error) bool {
-	if hasErrorCode(err,
+	if HasErrorCode(err,
 		"AuthFailure", "InvalidClientTokenId", "SignatureDoesNotMatch",
 		"IncompleteSignature",
 		"UnrecognizedClientException", "ExpiredToken", "ExpiredTokenException",
@@ -54,7 +54,7 @@ func IsAuthError(err error) bool {
 
 // IsPermissionError reports whether err is an IAM authorization failure.
 func IsPermissionError(err error) bool {
-	if hasErrorCode(err, "AccessDenied", "AccessDeniedException", "UnauthorizedOperation") {
+	if HasErrorCode(err, "AccessDenied", "AccessDeniedException", "UnauthorizedOperation") {
 		return true
 	}
 
@@ -63,7 +63,7 @@ func IsPermissionError(err error) bool {
 
 // IsQuotaError reports whether err is an AWS account quota or limit failure.
 func IsQuotaError(err error) bool {
-	return hasErrorCode(err,
+	return HasErrorCode(err,
 		"InstanceLimitExceeded",
 		"VpcLimitExceeded",
 		"VolumeLimitExceeded",
@@ -73,7 +73,7 @@ func IsQuotaError(err error) bool {
 
 // IsThrottlingError reports whether err is an AWS rate-limit failure.
 func IsThrottlingError(err error) bool {
-	return hasErrorCode(err,
+	return HasErrorCode(err,
 		"RequestLimitExceeded",
 		"Throttling",
 		"ThrottlingException",
@@ -114,7 +114,7 @@ func IsNetworkError(err error) bool {
 
 // IsServerError reports whether err is a transient AWS server-side failure.
 func IsServerError(err error) bool {
-	if hasErrorCode(err,
+	if HasErrorCode(err,
 		"ServiceUnavailable",
 		"InternalError",
 		"InternalFailure",
@@ -134,7 +134,7 @@ func IsRetryableError(err error) bool {
 // IsRegionError reports whether err indicates a region, opt-in, or resource
 // availability problem.
 func IsRegionError(err error) bool {
-	return hasErrorCode(err,
+	return HasErrorCode(err,
 		"OptInRequired",
 		"InvalidAMIID.NotFound",
 		"InvalidSubnetID.NotFound",
@@ -142,9 +142,9 @@ func IsRegionError(err error) bool {
 	)
 }
 
-// extract the error code, sometimes the error is wrapped
-// for each level of the error, check if the error code is in the list of codes
-func hasErrorCode(err error, codes ...string) bool {
+// HasErrorCode reports whether err (or any wrapped cause) is a smithy API error
+// whose ErrorCode matches one of codes.
+func HasErrorCode(err error, codes ...string) bool {
 	for err != nil {
 		var apiErr smithy.APIError
 		if errors.As(err, &apiErr) {

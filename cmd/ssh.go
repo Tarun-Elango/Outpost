@@ -24,6 +24,7 @@ const (
 	defaultSSHPort          = "22"
 )
 
+// go's way to run shell commands, code needs to call
 var execCommand = exec.Command
 
 // helper: ed25519KeyPaths returns paths to ~/.ssh/id_ed25519 and ~/.ssh/id_ed25519.pub.
@@ -36,32 +37,6 @@ func ed25519KeyPaths() (privateKey, publicKey string, err error) {
 	return filepath.Join(sshDir, "id_ed25519"), filepath.Join(sshDir, "id_ed25519.pub"), nil
 }
 
-// helper: ensureEd25519Key runs ssh-keygen to create ~/.ssh/id_ed25519 when the user confirms.
-func ensureEd25519Key() error {
-	priv, _, err := ed25519KeyPaths()
-	if err != nil {
-		return err
-	}
-
-	sshKeygen, err := exec.LookPath("ssh-keygen") // look for ssh-keygen binary in PATH
-	if err != nil {
-		return fmt.Errorf("ssh-keygen not found in PATH")
-	}
-
-	if err := os.MkdirAll(filepath.Dir(priv), 0o700); err != nil { // create the ~/.ssh directory if it doesn't exist
-		return fmt.Errorf("create ~/.ssh: %w", err)
-	}
-
-	cmd := exec.Command(sshKeygen, "-t", "ed25519", "-f", priv) // create the ed25519 key pair
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ssh-keygen failed: %w", err)
-	}
-	return nil
-}
-
 // defaultKeyPath returns ~/.ssh/id_ed25519 if it exists, otherwise "".
 func defaultKeyPath() string {
 	priv, _, err := ed25519KeyPaths()
@@ -72,12 +47,6 @@ func defaultKeyPath() string {
 		return priv
 	}
 	return ""
-}
-
-// SshStatusResponse is returned by GET /v2/boxes/{id}/ssh-status.
-type SshStatusResponse struct {
-	Ready    bool `json:"ready"`
-	Instance *Box `json:"instance"`
 }
 
 func sshBaseArgs(identity, portArg string) []string {
@@ -193,7 +162,6 @@ func SSH(args []string) {
 	}
 	ref := parsed.Ref
 
-	var status SshStatusResponse
 	var targetLabel string
 
 	rt := helper.MustOpenRuntime()
@@ -204,7 +172,7 @@ func SSH(args []string) {
 		os.Exit(1)
 	}
 	targetLabel = fmt.Sprintf("%s (%s)", target.Name, target.ID)
-	sshStatus, err := rt.GetSshStatus(target.ID, service.LocalUserID)
+	inst, err := rt.GetInstance(target.ID, service.LocalUserID)
 	closeErr := rt.Close()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ssh: %v\n", err)
@@ -214,23 +182,8 @@ func SSH(args []string) {
 		fmt.Fprintf(os.Stderr, "ssh: %v\n", closeErr)
 		os.Exit(1)
 	}
-	status.Ready = sshStatus.Ready
-	if sshStatus.Instance != nil {
 
-		box := instancesToBoxes([]*service.Instance{sshStatus.Instance})[0]
-		status.Instance = &box
-	}
-
-	if !status.Ready {
-		fmt.Fprintln(os.Stderr, "ssh: box is not ready yet (EC2 status checks still pending)")
-		os.Exit(1)
-	}
-	if status.Instance == nil {
-		fmt.Fprintln(os.Stderr, "ssh: server reported ready but returned no instance details, try the command again in a few minutes.")
-		os.Exit(1)
-	}
-
-	b := *status.Instance
+	b := instancesToBoxes([]*service.Instance{inst})[0]
 	if b.PublicIP == "" {
 		fmt.Fprintln(os.Stderr, "ssh: box has no IP address (is it running?)")
 		os.Exit(1)
@@ -296,8 +249,6 @@ func Exec(args []string) {
 	}
 	ref := fs.Arg(0)
 
-	var status SshStatusResponse
-
 	rt := helper.MustOpenRuntime()
 	target, err := helper.ResolveBoxTarget(rt, ref)
 	if err != nil {
@@ -305,7 +256,7 @@ func Exec(args []string) {
 		fmt.Fprintf(os.Stderr, "exec: %v\n", err)
 		os.Exit(1)
 	}
-	sshStatus, err := rt.GetSshStatus(target.ID, service.LocalUserID)
+	inst, err := rt.GetInstance(target.ID, service.LocalUserID)
 	closeErr := rt.Close()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "exec: %v\n", err)
@@ -315,22 +266,8 @@ func Exec(args []string) {
 		fmt.Fprintf(os.Stderr, "exec: %v\n", closeErr)
 		os.Exit(1)
 	}
-	status.Ready = sshStatus.Ready
-	if sshStatus.Instance != nil {
-		box := instancesToBoxes([]*service.Instance{sshStatus.Instance})[0]
-		status.Instance = &box
-	}
 
-	if !status.Ready {
-		fmt.Fprintln(os.Stderr, "exec: box is not ready yet.")
-		os.Exit(1)
-	}
-	if status.Instance == nil {
-		fmt.Fprintln(os.Stderr, "exec: server reported ready but returned no instance details, try the command again in a few minutes.")
-		os.Exit(1)
-	}
-
-	b := *status.Instance
+	b := instancesToBoxes([]*service.Instance{inst})[0]
 	if b.PublicIP == "" {
 		fmt.Fprintln(os.Stderr, "exec: box has no IP address (is it running?)")
 		os.Exit(1)
@@ -378,16 +315,10 @@ func Exec(args []string) {
 /*
 ssh flowchart
 flowchart TD
-    A[Parse flags + box id] --> B{mode}
-    B -->|local| C[GetSshStatus + manual map to Box]
-    B -->|remote| D[GET /v2/boxes/id/ssh-status]
-    C --> E[Unified validation]
-    D --> E
-    E --> F{ready?}
-    F -->|no| X[exit]
-    F -->|yes| G{instance + IP + running?}
-    G -->|no| X
-    G -->|yes| H[checkDevboxReady probe]
-    H --> I[syscall.Exec ssh]
+    A[Parse flags + box id] --> B[GetInstance + map to Box]
+    B --> C{IP + running?}
+    C -->|no| X[exit]
+    C -->|yes| D[waitForDevboxReady probe]
+    D --> E[syscall.Exec ssh]
 
 */

@@ -95,7 +95,7 @@ func (r *Runtime) CreateSnapshot(boxID, name, userID string) (*Snapshot, error) 
 func (r *Runtime) ListSnapshots(userID string) ([]*Snapshot, error) {
 	db := r.DB()
 
-	records, err := db.ListSnapshotsByUserID(userID)
+	records, err := db.ListSnapshotsByUserIDWithBoxAwsID(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (r *Runtime) ListSnapshots(userID string) ([]*Snapshot, error) {
 
 	amiIDsByRegion := make(map[string][]string)
 	for _, rec := range records {
-		region, err := r.regionForSnapshotRecord(rec)
+		region, err := regionForSnapshotRecord(rec.SnapshotRecord)
 		if err != nil {
 			return nil, err
 		}
@@ -131,60 +131,37 @@ func (r *Runtime) ListSnapshots(userID string) ([]*Snapshot, error) {
 		}
 	}
 
-	for _, record := range records {
-		awsState, ok := stateByAmiID[record.AmiID]
-		if !ok {
-			if err := db.DeleteSnapshotByAmiID(record.AmiID); err != nil {
-				return nil, err
+	snapshots := make([]*Snapshot, 0, len(records))
+	err = reconcileLocalAgainstRemote(records,
+		func(rec localDb.SnapshotWithBoxAwsID) string { return rec.AmiID },
+		stateByAmiID,
+		func(rec localDb.SnapshotWithBoxAwsID) error {
+			return db.DeleteSnapshotByAmiID(rec.AmiID)
+		},
+		func(rec localDb.SnapshotWithBoxAwsID, awsState string) error {
+			if localDb.StringValue(rec.State) != awsState {
+				if err := db.UpdateSnapshotState(rec.AmiID, awsState); err != nil {
+					return err
+				}
 			}
-			continue
-		}
-		dbState := ""
-		if record.State.Valid {
-			dbState = record.State.String
-		}
-		if dbState != awsState {
-			if err := db.UpdateSnapshotState(record.AmiID, awsState); err != nil {
-				return nil, err
+			region, err := regionForSnapshotRecord(rec.SnapshotRecord)
+			if err != nil {
+				return err
 			}
-		}
-	}
-
-	recordsWithBox, err := db.ListSnapshotsByUserIDWithBoxAwsID(userID)
+			snapshots = append(snapshots, &Snapshot{
+				AmiID:    rec.AmiID,
+				Name:     rec.Name,
+				State:    awsState,
+				BoxAwsID: localDb.StringValue(rec.BoxAwsID),
+				Region:   region,
+				Provider: providerForSnapshotRecord(rec.SnapshotRecord, region),
+			})
+			return nil
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
-	if len(recordsWithBox) == 0 {
-		return nil, nil
-	}
-
-	snapshots := make([]*Snapshot, 0, len(recordsWithBox))
-	for _, rec := range recordsWithBox {
-		state := "unknown"
-		if awsState, ok := stateByAmiID[rec.AmiID]; ok {
-			state = awsState
-		} else if rec.State.Valid {
-			state = rec.State.String
-		}
-		boxAwsID := ""
-		if rec.BoxAwsID.Valid {
-			boxAwsID = rec.BoxAwsID.String
-		}
-		region, err := r.regionForSnapshotRecord(rec.SnapshotRecord) // region for the snapshot
-		if err != nil {
-			return nil, err
-		}
-		provider := providerForSnapshotRecord(rec.SnapshotRecord, region)
-		snapshots = append(snapshots, &Snapshot{
-			AmiID:    rec.AmiID,
-			Name:     rec.Name,
-			State:    state,
-			BoxAwsID: boxAwsID,
-			Region:   region,
-			Provider: provider,
-		})
-	}
-
 	return snapshots, nil
 }
 
@@ -223,29 +200,24 @@ func (r *Runtime) GetSnapshot(amiID, userID string) (*Snapshot, error) {
 	}
 
 	awsState := string(resp.Images[0].State)
-	dbState := ""
-	if record.State.Valid {
-		dbState = record.State.String
-	}
-	if dbState != awsState {
+	if localDb.StringValue(record.State) != awsState {
 		if err := db.UpdateSnapshotState(amiID, awsState); err != nil {
 			return nil, err
 		}
 	}
 
 	boxAwsID := ""
-	if record.BoxID.Valid && record.BoxID.String != "" {
-		box, err := db.GetInstanceByID(record.BoxID.String)
+	if boxID := localDb.StringValue(record.BoxID); boxID != "" {
+		box, err := db.GetInstanceByID(boxID)
 		if err == nil {
 			boxAwsID = box.AwsInstanceID
 		}
 	}
 
-	region, err := r.regionForSnapshotRecord(*record)
+	region, err := regionForSnapshotRecord(*record)
 	if err != nil {
 		return nil, err
 	}
-	provider := providerForSnapshotRecord(*record, region)
 
 	return &Snapshot{
 		AmiID:    record.AmiID,
@@ -253,7 +225,7 @@ func (r *Runtime) GetSnapshot(amiID, userID string) (*Snapshot, error) {
 		State:    awsState,
 		BoxAwsID: boxAwsID,
 		Region:   region,
-		Provider: provider,
+		Provider: providerForSnapshotRecord(*record, region),
 	}, nil
 }
 
@@ -308,47 +280,26 @@ func (r *Runtime) DeleteSnapshot(amiID, userID string) error {
 	return db.DeleteSnapshotByAmiID(amiID) // delete snapshot from local db
 }
 
-func (r *Runtime) regionForSnapshotRecord(record localDb.SnapshotRecord) (string, error) {
-	// The snapshot's own stored region is authoritative; it survives box deletion.
-	if record.Region.Valid && record.Region.String != "" {
-		return record.Region.String, nil
+// regionForSnapshotRecord returns the snapshot's stored region. Region is
+// captured at create time (and backfilled by migrateSnapshotsRegionProvider);
+// there is no box/config fallback.
+func regionForSnapshotRecord(record localDb.SnapshotRecord) (string, error) {
+	if region := localDb.StringValue(record.Region); region != "" {
+		return region, nil
 	}
-
-	// if the snapshot has a box id, get the region for the box
-	if record.BoxID.Valid && record.BoxID.String != "" {
-		box, err := r.DB().GetInstanceByID(record.BoxID.String)
-		if err == nil {
-			cfg, err := awsclient.LoadConfig()
-			if err != nil {
-				return "", err
-			}
-			return regionForRecord(*box, cfg.AwsRegion), nil
-		}
-		if err != sql.ErrNoRows {
-			return "", err
-		}
-	}
-
-	cfg, err := awsclient.LoadConfig()
-	if err != nil {
-		return "", err
-	}
-	if cfg.AwsRegion == "" {
-		return "", fmt.Errorf("aws region is required; run: devbox setup")
-	}
-	return cfg.AwsRegion, nil
+	return "", fmt.Errorf("snapshot %s has no stored region", record.AmiID)
 }
 
 // providerForSnapshotRecord returns the provider for the snapshot record.
 func providerForSnapshotRecord(record localDb.SnapshotRecord, region string) string {
-	if record.Provider.Valid && record.Provider.String != "" {
-		return record.Provider.String
+	if provider := localDb.StringValue(record.Provider); provider != "" {
+		return provider
 	}
 	return ProviderForRegion(region)
 }
 
 func (r *Runtime) ec2ForSnapshotRecord(record localDb.SnapshotRecord) (*ec2.Client, error) {
-	region, err := r.regionForSnapshotRecord(record)
+	region, err := regionForSnapshotRecord(record)
 	if err != nil {
 		return nil, err
 	}

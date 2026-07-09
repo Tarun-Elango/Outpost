@@ -5,7 +5,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/budgets"
 	budgetstypes "github.com/aws/aws-sdk-go-v2/service/budgets/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	smithy "github.com/aws/smithy-go"
 
 	awsclient "devbox-cli/service/aws"
 )
@@ -30,6 +28,8 @@ const budgetCacheFile = "budgets-cache.json" // no need to back up this file
 
 // budgetCacheTTL bounds how long a cached budgets response is reused.
 const budgetCacheTTL = 12 * time.Hour
+
+const budgetsPermissionHint = "add AWSBudgetsActionsWithAWSResourceControlAccess permission to the IAM user"
 
 // BudgetSummary is a simplified view of an AWS Budget for display.
 type BudgetSummary struct {
@@ -94,25 +94,23 @@ func ListBudgets(ctx context.Context, opts ListBudgetsOptions) (ListBudgetsResul
 	}
 
 	if !opts.Refresh {
-		// if the data is cached, return the cached data
 		if cached, ok := readBudgetCache(accountID); ok {
 			return ListBudgetsResult{Budgets: cached.Budgets, Cached: true, FetchedAt: cached.FetchedAt}, nil
 		}
 	}
 
-	client, err := awsclient.NewClientForRegion(ctx, budgetsRegion) // get the client for the budgets region
+	budgetsClient, err := newBudgetsClient(ctx)
 	if err != nil {
 		return ListBudgetsResult{}, err
 	}
-	budgetsClient := budgets.NewFromConfig(client.Config()) // create the budgets client
 
-	summaries, err := describeAllBudgets(ctx, budgetsClient, accountID) // describe all the budgets
+	summaries, err := describeAllBudgets(ctx, budgetsClient, accountID)
 	if err != nil {
-		return ListBudgetsResult{}, wrapBudgetError("list budgets", err)
+		return ListBudgetsResult{}, wrapBudgetAPIError("list", "", err)
 	}
 
 	fetchedAt := time.Now()
-	writeBudgetCache(budgetCachePayload{FetchedAt: fetchedAt, AccountID: accountID, Budgets: summaries}) // write the cache
+	writeBudgetCache(budgetCachePayload{FetchedAt: fetchedAt, AccountID: accountID, Budgets: summaries})
 
 	return ListBudgetsResult{Budgets: summaries, Cached: false, FetchedAt: fetchedAt}, nil
 }
@@ -132,16 +130,10 @@ func CreateBudget(ctx context.Context, opts CreateBudgetOptions) error {
 		return fmt.Errorf("a valid email address is required for budget alerts")
 	}
 
-	accountID, err := accountIDForBudgets(ctx)
+	budgetsClient, accountID, err := budgetsClient(ctx)
 	if err != nil {
 		return err
 	}
-
-	client, err := awsclient.NewClientForRegion(ctx, budgetsRegion)
-	if err != nil {
-		return err
-	}
-	budgetsClient := budgets.NewFromConfig(client.Config())
 
 	if err := createBudgetWithClient(ctx, budgetsClient, accountID, opts); err != nil {
 		return err
@@ -158,16 +150,10 @@ func DeleteBudget(ctx context.Context, name string) error {
 		return fmt.Errorf("budget name is required")
 	}
 
-	accountID, err := accountIDForBudgets(ctx)
+	budgetsClient, accountID, err := budgetsClient(ctx)
 	if err != nil {
 		return err
 	}
-
-	client, err := awsclient.NewClientForRegion(ctx, budgetsRegion)
-	if err != nil {
-		return err
-	}
-	budgetsClient := budgets.NewFromConfig(client.Config())
 
 	if err := deleteBudgetWithClient(ctx, budgetsClient, accountID, name); err != nil {
 		return err
@@ -184,23 +170,17 @@ func GetBudgetDetails(ctx context.Context, name string) (BudgetDetails, error) {
 		return BudgetDetails{}, fmt.Errorf("budget name is required")
 	}
 
-	accountID, err := accountIDForBudgets(ctx)
+	budgetsClient, accountID, err := budgetsClient(ctx)
 	if err != nil {
 		return BudgetDetails{}, err
 	}
-
-	client, err := awsclient.NewClientForRegion(ctx, budgetsRegion)
-	if err != nil {
-		return BudgetDetails{}, err
-	}
-	budgetsClient := budgets.NewFromConfig(client.Config())
 
 	out, err := budgetsClient.DescribeBudget(ctx, &budgets.DescribeBudgetInput{
 		AccountId:  aws.String(accountID),
 		BudgetName: aws.String(name),
 	})
 	if err != nil {
-		return BudgetDetails{}, wrapBudgetGetError(name, err)
+		return BudgetDetails{}, wrapBudgetAPIError("get", name, err)
 	}
 
 	limitUSD, err := budgetLimitUSD(out.Budget)
@@ -216,8 +196,15 @@ func GetBudgetDetails(ctx context.Context, name string) (BudgetDetails, error) {
 	return BudgetDetails{Name: name, LimitUSD: limitUSD, Email: email}, nil
 }
 
-// UpdateBudget changes a budget's name, limit, and/or alert email. AWS does not
-// allow renaming in place; a name change creates the new budget then deletes the old one.
+// UpdateBudget changes a budget's name, limit, and/or alert email.
+//
+// AWS does not allow renaming in place; a name change creates the new budget
+// then deletes the old one.
+//
+// Limit and email updates are sequential API calls. If the second fails after
+// the first succeeds, the budget can be left half-applied (new limit with old
+// email, or vice versa). The only early return is the no-op path when nothing
+// changed.
 func UpdateBudget(ctx context.Context, opts UpdateBudgetOptions) error {
 	currentName := strings.TrimSpace(opts.CurrentName)
 	if currentName == "" {
@@ -252,19 +239,12 @@ func UpdateBudget(ctx context.Context, opts UpdateBudgetOptions) error {
 		return fmt.Errorf("a valid email address is required for budget alerts")
 	}
 
-	accountID, err := accountIDForBudgets(ctx)
+	budgetsClient, accountID, err := budgetsClient(ctx)
 	if err != nil {
 		return err
 	}
-
-	client, err := awsclient.NewClientForRegion(ctx, budgetsRegion)
-	if err != nil {
-		return err
-	}
-	budgetsClient := budgets.NewFromConfig(client.Config())
 
 	if newName != details.Name {
-		// if the name is different, create a new budget and delete the old one
 		if err := createBudgetWithClient(ctx, budgetsClient, accountID, CreateBudgetOptions{
 			Name:     newName,
 			LimitUSD: newLimit,
@@ -272,28 +252,56 @@ func UpdateBudget(ctx context.Context, opts UpdateBudgetOptions) error {
 		}); err != nil {
 			return err
 		}
-		// delete the old budget
 		if err := deleteBudgetWithClient(ctx, budgetsClient, accountID, details.Name); err != nil {
+			clearBudgetCache()
 			return fmt.Errorf("renamed budget to %q but failed to delete %q: %w\nhint: delete the old budget manually with `devbox budget delete %q`", newName, details.Name, err, details.Name)
 		}
 		clearBudgetCache()
 		return nil
 	}
-	// if the limit is different, update the limit
-	if newLimit != details.LimitUSD {
+
+	limitChanged := newLimit != details.LimitUSD
+	emailChanged := newEmail != details.Email
+
+	if limitChanged {
 		if err := updateBudgetLimit(ctx, budgetsClient, accountID, details.Name, newLimit); err != nil {
 			return err
 		}
 	}
-	// if the email is different, update the email
-	if newEmail != details.Email {
+	if emailChanged {
 		if err := updateBudgetEmail(ctx, budgetsClient, accountID, details.Name, details.Email, newEmail); err != nil {
+			if limitChanged {
+				clearBudgetCache()
+				return fmt.Errorf("updated budget limit but failed to update alert email: %w\nhint: retry the email change, or set the email manually in the AWS Budgets console — the monthly limit is already %g USD", err, newLimit)
+			}
 			return err
 		}
 	}
 
 	clearBudgetCache()
 	return nil
+}
+
+// budgetsClient resolves the account ID and returns a Budgets API client pinned
+// to us-east-1.
+func budgetsClient(ctx context.Context) (*budgets.Client, string, error) {
+	accountID, err := accountIDForBudgets(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	client, err := newBudgetsClient(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	return client, accountID, nil
+}
+
+func newBudgetsClient(ctx context.Context) (*budgets.Client, error) {
+	client, err := awsclient.NewClientForRegion(ctx, budgetsRegion)
+	if err != nil {
+		return nil, err
+	}
+	return budgets.NewFromConfig(client.Config()), nil
 }
 
 func createBudgetWithClient(ctx context.Context, budgetsClient *budgets.Client, accountID string, opts CreateBudgetOptions) error {
@@ -319,7 +327,7 @@ func createBudgetWithClient(ctx context.Context, budgetsClient *budgets.Client, 
 		NotificationsWithSubscribers: defaultBudgetNotifications(emailSubscriber),
 	})
 	if err != nil {
-		return wrapBudgetCreateError(name, err)
+		return wrapBudgetAPIError("create", name, err)
 	}
 	return nil
 }
@@ -330,7 +338,7 @@ func deleteBudgetWithClient(ctx context.Context, budgetsClient *budgets.Client, 
 		BudgetName: aws.String(name),
 	})
 	if err != nil {
-		return wrapBudgetDeleteError(name, err)
+		return wrapBudgetAPIError("delete", name, err)
 	}
 	return nil
 }
@@ -341,7 +349,7 @@ func updateBudgetLimit(ctx context.Context, budgetsClient *budgets.Client, accou
 		BudgetName: aws.String(name),
 	})
 	if err != nil {
-		return wrapBudgetGetError(name, err)
+		return wrapBudgetAPIError("get", name, err)
 	}
 
 	b := out.Budget
@@ -356,7 +364,7 @@ func updateBudgetLimit(ctx context.Context, budgetsClient *budgets.Client, accou
 		NewBudget: b,
 	})
 	if err != nil {
-		return wrapBudgetUpdateError(name, err)
+		return wrapBudgetAPIError("update", name, err)
 	}
 	return nil
 }
@@ -377,12 +385,10 @@ func updateBudgetEmail(ctx context.Context, budgetsClient *budgets.Client, accou
 	}
 
 	for _, notification := range notifications {
-		// for each alert, describe the subscribers
 		subscribers, err := describeNotificationSubscribers(ctx, budgetsClient, accountID, budgetName, notification)
 		if err != nil {
 			return err
 		}
-		// for each subscriber, update the subscriber
 		for _, sub := range subscribers {
 			if sub.SubscriptionType != budgetstypes.SubscriptionTypeEmail {
 				continue
@@ -398,19 +404,18 @@ func updateBudgetEmail(ctx context.Context, budgetsClient *budgets.Client, accou
 				NewSubscriber: &newSubscriber,
 			})
 			if err != nil {
-				return wrapBudgetUpdateError(budgetName, err)
+				return wrapBudgetAPIError("update", budgetName, err)
 			}
 		}
 	}
 	return nil
 }
 
-// budgetLimitUSD converts the budget limit to a float64
 func budgetLimitUSD(b *budgetstypes.Budget) (float64, error) {
 	if b == nil || b.BudgetLimit == nil {
 		return 0, fmt.Errorf("budget has no limit")
 	}
-	limit, err := strconv.ParseFloat(aws.ToString(b.BudgetLimit.Amount), 64) // parse the limit to a float64
+	limit, err := strconv.ParseFloat(aws.ToString(b.BudgetLimit.Amount), 64)
 	if err != nil {
 		return 0, fmt.Errorf("parse budget limit: %w", err)
 	}
@@ -448,7 +453,7 @@ func describeBudgetNotifications(ctx context.Context, budgetsClient *budgets.Cli
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			return nil, wrapBudgetGetError(budgetName, err)
+			return nil, wrapBudgetAPIError("get", budgetName, err)
 		}
 		for i := range page.Notifications {
 			notifications = append(notifications, &page.Notifications[i])
@@ -467,14 +472,13 @@ func describeNotificationSubscribers(ctx context.Context, budgetsClient *budgets
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			return nil, wrapBudgetGetError(budgetName, err)
+			return nil, wrapBudgetAPIError("get", budgetName, err)
 		}
 		subscribers = append(subscribers, page.Subscribers...)
 	}
 	return subscribers, nil
 }
 
-// defaultBudgetNotifications creates the default budget notifications for the budget
 func defaultBudgetNotifications(email budgetstypes.Subscriber) []budgetstypes.NotificationWithSubscribers {
 	thresholds := []struct {
 		notificationType budgetstypes.NotificationType
@@ -500,83 +504,68 @@ func defaultBudgetNotifications(email budgetstypes.Subscriber) []budgetstypes.No
 	return notifications
 }
 
-func wrapBudgetError(operation string, err error) error {
+// wrapBudgetAPIError maps Budgets API failures to user-facing errors with
+// operation-specific hints. name is used for not-found / duplicate messages.
+func wrapBudgetAPIError(op, name string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	operation := op + " budget"
+	if op == "list" {
+		operation = "list budgets"
+	}
+
 	if awsclient.IsPermissionError(err) {
-		return fmt.Errorf("%s: %w\nhint: add the AWSBudgetsActionsWithAWSResourceControlAccess permission policy to the IAM user", operation, err)
+		hint := budgetsPermissionHint
+		if op == "list" {
+			hint = "add the AWSBudgetsActionsWithAWSResourceControlAccess permission policy to the IAM user"
+		}
+		return fmt.Errorf("%s: %w\nhint: %s", operation, err, hint)
+	}
+
+	// replace: stand-alone message (no wrap). wrapHint: "%w" + hint suffix.
+	type budgetErrCase struct {
+		code     string
+		replace  string // if non-empty, returned as-is
+		wrapHint string // if non-empty, fmt.Errorf("%s: %w\nhint: %s", operation, err, wrapHint)
+	}
+	var cases []budgetErrCase
+	switch op {
+	case "create":
+		cases = []budgetErrCase{
+			{code: "DuplicateRecordException", replace: fmt.Sprintf("budget already exists: %s\nhint: choose a different name or delete the existing budget first", name)},
+			{code: "CreationLimitExceededException", wrapHint: "AWS budget or notification limit reached — delete unused budgets or request a limit increase in the AWS console"},
+			{code: "InvalidParameterException", wrapHint: "check the budget name, limit, and email address"},
+			{code: "ServiceQuotaExceededException", wrapHint: "AWS service quota reached — request a quota increase in the AWS console"},
+			{code: "ResourceLockedException", wrapHint: "the budget is locked — wait a moment and retry"},
+		}
+	case "get", "delete":
+		cases = []budgetErrCase{
+			{code: "NotFoundException", replace: fmt.Sprintf("budget not found: %s\nhint: run `devbox budget ls` to see existing budgets", name)},
+		}
+	case "update":
+		cases = []budgetErrCase{
+			{code: "NotFoundException", replace: fmt.Sprintf("budget not found: %s\nhint: run `devbox budget ls` to see existing budgets", name)},
+			{code: "InvalidParameterException", wrapHint: "check the budget name, limit, and email address"},
+			{code: "DuplicateRecordException", replace: fmt.Sprintf("budget already exists: %s\nhint: choose a different name", name)},
+		}
+	}
+
+	for _, c := range cases {
+		if !awsclient.HasErrorCode(err, c.code) {
+			continue
+		}
+		if c.replace != "" {
+			return fmt.Errorf("%s", c.replace)
+		}
+		return fmt.Errorf("%s: %w\nhint: %s", operation, err, c.wrapHint)
 	}
 	return awsclient.WrapError(operation, err)
 }
 
-func wrapBudgetCreateError(name string, err error) error {
-	if awsclient.IsPermissionError(err) {
-		return fmt.Errorf("create budget: %w\nhint: add AWSBudgetsActionsWithAWSResourceControlAccess permission to the IAM user", err)
-	}
-	switch {
-	case budgetHasErrorCode(err, "DuplicateRecordException"):
-		return fmt.Errorf("budget already exists: %s\nhint: choose a different name or delete the existing budget first", name)
-	case budgetHasErrorCode(err, "CreationLimitExceededException"):
-		return fmt.Errorf("create budget: %w\nhint: AWS budget or notification limit reached — delete unused budgets or request a limit increase in the AWS console", err)
-	case budgetHasErrorCode(err, "InvalidParameterException"):
-		return fmt.Errorf("create budget: %w\nhint: check the budget name, limit, and email address", err)
-	case budgetHasErrorCode(err, "ServiceQuotaExceededException"):
-		return fmt.Errorf("create budget: %w\nhint: AWS service quota reached — request a quota increase in the AWS console", err)
-	case budgetHasErrorCode(err, "ResourceLockedException"):
-		return fmt.Errorf("create budget: %w\nhint: the budget is locked — wait a moment and retry", err)
-	default:
-		return awsclient.WrapError("create budget", err)
-	}
-}
-
-func wrapBudgetGetError(name string, err error) error {
-	if awsclient.IsPermissionError(err) {
-		return fmt.Errorf("get budget: %w\nhint: add AWSBudgetsActionsWithAWSResourceControlAccess permission to the IAM user", err)
-	}
-	if budgetHasErrorCode(err, "NotFoundException") {
-		return fmt.Errorf("budget not found: %s\nhint: run `devbox budget ls` to see existing budgets", name)
-	}
-	return awsclient.WrapError("get budget", err)
-}
-
-func wrapBudgetUpdateError(name string, err error) error {
-	if awsclient.IsPermissionError(err) {
-		return fmt.Errorf("update budget: %w\nhint: add AWSBudgetsActionsWithAWSResourceControlAccess permission to the IAM user", err)
-	}
-	switch {
-	case budgetHasErrorCode(err, "NotFoundException"):
-		return fmt.Errorf("budget not found: %s\nhint: run `devbox budget ls` to see existing budgets", name)
-	case budgetHasErrorCode(err, "InvalidParameterException"):
-		return fmt.Errorf("update budget: %w\nhint: check the budget name, limit, and email address", err)
-	case budgetHasErrorCode(err, "DuplicateRecordException"):
-		return fmt.Errorf("budget already exists: %s\nhint: choose a different name", name)
-	default:
-		return awsclient.WrapError("update budget", err)
-	}
-}
-
-func wrapBudgetDeleteError(name string, err error) error {
-	if awsclient.IsPermissionError(err) {
-		return fmt.Errorf("delete budget: %w\nhint: add AWSBudgetsActionsWithAWSResourceControlAccess permission to the IAM user", err)
-	}
-	if budgetHasErrorCode(err, "NotFoundException") {
-		return fmt.Errorf("budget not found: %s\nhint: run `devbox budget ls` to see existing budgets", name)
-	}
-	return awsclient.WrapError("delete budget", err)
-}
-
-func budgetHasErrorCode(err error, code string) bool {
-	for err != nil {
-		var apiErr smithy.APIError
-		if errors.As(err, &apiErr) && apiErr.ErrorCode() == code {
-			return true
-		}
-		err = errors.Unwrap(err)
-	}
-	return false
-}
-
 // accountIDForBudgets resolves the AWS account ID via STS, using the box
 // region client (STS is regional-agnostic enough for this call).
-// returns the account ID
 func accountIDForBudgets(ctx context.Context) (string, error) {
 	client, err := awsclient.NewClient(ctx)
 	if err != nil {
@@ -609,7 +598,6 @@ func describeAllBudgets(ctx context.Context, client *budgets.Client, accountID s
 	return summaries, nil
 }
 
-// toBudgetSummary converts a AWS Budget to a BudgetSummary object
 func toBudgetSummary(b budgetstypes.Budget) BudgetSummary {
 	s := BudgetSummary{
 		Name:        aws.ToString(b.BudgetName),
@@ -680,7 +668,7 @@ func readBudgetCache(accountID string) (budgetCachePayload, bool) {
 	if payload.AccountID != accountID {
 		return budgetCachePayload{}, false
 	}
-	if time.Since(payload.FetchedAt) > budgetCacheTTL { // if the data is older than the cache TTL, return false
+	if time.Since(payload.FetchedAt) > budgetCacheTTL {
 		return budgetCachePayload{}, false
 	}
 	return payload, true

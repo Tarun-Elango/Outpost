@@ -65,6 +65,7 @@ func IdleRouter(args []string) {
 	}
 }
 
+// set
 func idleSet(ref, minutesStr string) {
 	minutesInt, err := strconv.Atoi(minutesStr)
 	if err != nil {
@@ -91,20 +92,11 @@ func idleSet(ref, minutesStr string) {
 		os.Exit(1)
 	}
 
-	sshStatus, err := rt.GetSshStatus(target.ID, service.LocalUserID)
+	box, err := rt.GetInstance(target.ID, service.LocalUserID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	if !sshStatus.Ready {
-		fmt.Fprintln(os.Stderr, "error: box is not ready yet (EC2 status checks still pending)")
-		os.Exit(1)
-	}
-	if sshStatus.Instance == nil {
-		fmt.Fprintln(os.Stderr, "error: box is ready but instance details are unavailable, try again in a few minutes")
-		os.Exit(1)
-	}
-	box := sshStatus.Instance
 	if box.Status != "running" {
 		fmt.Fprintf(os.Stderr, "error: box is %s, not running\n", box.Status)
 		os.Exit(1)
@@ -147,6 +139,199 @@ func idleSet(ref, minutesStr string) {
 	fmt.Printf("idle-stop set to %d minutes for %s\n", minutesInt, inst.Name)
 }
 
+// delete for a specific instance
+/*
+# 1. Stop and disable timer + boot service
+sudo systemctl disable --now devbox-idle-stop.timer
+sudo systemctl disable --now devbox-idle-stop-boot.service
+
+# 2. Reload systemd
+sudo systemctl daemon-reload
+
+# 3. Remove systemd units (3 files now)
+sudo rm -f /etc/systemd/system/devbox-idle-stop.timer
+sudo rm -f /etc/systemd/system/devbox-idle-stop.service
+sudo rm -f /etc/systemd/system/devbox-idle-stop-boot.service
+
+# 4. Remove check script
+sudo rm -f /usr/local/bin/devbox-idle-stop
+
+# 5. Remove idle-stop config/state
+sudo rm -f /var/lib/devbox/idle-stop-minutes
+sudo rm -f /var/lib/devbox/last-activity
+
+# 6. Reload + clear failed state
+sudo systemctl daemon-reload
+sudo systemctl reset-failed devbox-idle-stop.service 2>/dev/null || true
+sudo systemctl reset-failed devbox-idle-stop-boot.service 2>/dev/null || true
+*/
+func deleteIdleStop(ref string) {
+	rt := helper.MustOpenRuntime()
+	defer func() { _ = rt.Close() }()
+	target, err := helper.ResolveBoxTarget(rt, ref)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	db := rt.DB()
+
+	inst, err := db.GetInstanceByAwsInstanceIDAndUserID(target.ID, service.LocalUserID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if !inst.IdleStopMinutes.Valid {
+		fmt.Fprintln(os.Stderr, "error: idle-stop is not set")
+		os.Exit(1)
+	}
+
+	box, err := rt.GetInstance(target.ID, service.LocalUserID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if box.Status != "running" {
+		fmt.Fprintf(os.Stderr, "error: box is %s, not running\n", box.Status)
+		os.Exit(1)
+	}
+	host, err := box.SSHHost()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	sshBin, err := exec.LookPath("ssh")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error: ssh binary not found in PATH")
+		os.Exit(1)
+	}
+
+	identity := defaultKeyPath()
+	ready, err := checkDevboxReady(sshBin, identity, "ec2-user", host, "22")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: readiness probe failed: %v\n", err)
+		os.Exit(1)
+	}
+	if !ready {
+		fmt.Fprintln(os.Stderr, "error: devbox is not ready yet — try again in a minute")
+		os.Exit(1)
+	}
+
+	if err := uninstallIdleStop(sshBin, identity, "ec2-user", host); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := db.SetInstanceIdleStopMinutes(inst.AwsInstanceID, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("idle-stop removed for %s\n", inst.Name)
+}
+
+// show for a specific instance
+func showIdleStop(ref string) {
+	rt := helper.MustOpenRuntime()
+	defer func() { _ = rt.Close() }()
+	target, err := helper.ResolveBoxTarget(rt, ref)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	db := rt.DB()
+
+	inst, err := db.GetInstanceByAwsInstanceIDAndUserID(target.ID, service.LocalUserID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if !inst.IdleStopMinutes.Valid {
+		fmt.Println("no idle stop set")
+		return
+	}
+	fmt.Printf("idle-stop is set to %d minutes for %s\n", inst.IdleStopMinutes.Int64, inst.Name)
+}
+
+// update for a specific instance
+func updateIdleStop(ref, minutesStr string) {
+	minutesInt, err := strconv.Atoi(minutesStr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error: minutes must be an integer")
+		os.Exit(1)
+	}
+	if minutesInt <= 0 {
+		fmt.Fprintln(os.Stderr, "error: minutes must be greater than 0")
+		os.Exit(1)
+	}
+
+	rt := helper.MustOpenRuntime()
+	defer func() { _ = rt.Close() }()
+	target, err := helper.ResolveBoxTarget(rt, ref)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	db := rt.DB()
+
+	inst, err := db.GetInstanceByAwsInstanceIDAndUserID(target.ID, service.LocalUserID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if !inst.IdleStopMinutes.Valid {
+		fmt.Fprintln(os.Stderr, "error: idle-stop is not set — use 'devbox idle-stop set <id|name> <minutes>' first")
+		os.Exit(1)
+	}
+
+	box, err := rt.GetInstance(target.ID, service.LocalUserID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if box.Status != "running" {
+		fmt.Fprintf(os.Stderr, "error: box is %s, not running\n", box.Status)
+		os.Exit(1)
+	}
+	host, err := box.SSHHost()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	sshBin, err := exec.LookPath("ssh")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error: ssh binary not found in PATH")
+		os.Exit(1)
+	}
+
+	identity := defaultKeyPath()
+	ready, err := checkDevboxReady(sshBin, identity, "ec2-user", host, "22")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: readiness probe failed: %v\n", err)
+		os.Exit(1)
+	}
+	if !ready {
+		fmt.Fprintln(os.Stderr, "error: devbox is not ready yet — try again in a minute")
+		os.Exit(1)
+	}
+
+	if err := updateIdleStopOnHost(sshBin, identity, "ec2-user", host, minutesInt); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := db.SetInstanceIdleStopMinutes(inst.AwsInstanceID, &minutesInt); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("last-activity reset on host")
+	fmt.Printf("idle-stop updated to %d minutes for %s\n", minutesInt, inst.Name)
+}
+
+// helper: installIdleStop installs the idle stop service on the host ( needs ssh)
 /*
 mkdir -p /var/lib/devbox
 Writes minutesInt to /var/lib/devbox/idle-stop-minutes
@@ -199,106 +384,7 @@ systemctl start devbox-idle-stop-boot.service
 	return nil
 }
 
-// delete for a specific instance
-/*
-# 1. Stop and disable timer + boot service
-sudo systemctl disable --now devbox-idle-stop.timer
-sudo systemctl disable --now devbox-idle-stop-boot.service
-
-# 2. Reload systemd
-sudo systemctl daemon-reload
-
-# 3. Remove systemd units (3 files now)
-sudo rm -f /etc/systemd/system/devbox-idle-stop.timer
-sudo rm -f /etc/systemd/system/devbox-idle-stop.service
-sudo rm -f /etc/systemd/system/devbox-idle-stop-boot.service
-
-# 4. Remove check script
-sudo rm -f /usr/local/bin/devbox-idle-stop
-
-# 5. Remove idle-stop config/state
-sudo rm -f /var/lib/devbox/idle-stop-minutes
-sudo rm -f /var/lib/devbox/last-activity
-
-# 6. Reload + clear failed state
-sudo systemctl daemon-reload
-sudo systemctl reset-failed devbox-idle-stop.service 2>/dev/null || true
-sudo systemctl reset-failed devbox-idle-stop-boot.service 2>/dev/null || true
-*/
-func deleteIdleStop(ref string) {
-	rt := helper.MustOpenRuntime()
-	defer func() { _ = rt.Close() }()
-	target, err := helper.ResolveBoxTarget(rt, ref)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	db := rt.DB()
-
-	inst, err := db.GetInstanceByAwsInstanceIDAndUserID(target.ID, service.LocalUserID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	if !inst.IdleStopMinutes.Valid {
-		fmt.Fprintln(os.Stderr, "error: idle-stop is not set")
-		os.Exit(1)
-	}
-
-	sshStatus, err := rt.GetSshStatus(target.ID, service.LocalUserID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	if !sshStatus.Ready {
-		fmt.Fprintln(os.Stderr, "error: box is not ready yet (EC2 status checks still pending)")
-		os.Exit(1)
-	}
-	if sshStatus.Instance == nil {
-		fmt.Fprintln(os.Stderr, "error: box is ready but instance details are unavailable, try again in a few minutes")
-		os.Exit(1)
-	}
-	box := sshStatus.Instance
-	if box.Status != "running" {
-		fmt.Fprintf(os.Stderr, "error: box is %s, not running\n", box.Status)
-		os.Exit(1)
-	}
-	host, err := box.SSHHost()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	sshBin, err := exec.LookPath("ssh")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: ssh binary not found in PATH")
-		os.Exit(1)
-	}
-
-	identity := defaultKeyPath()
-	ready, err := checkDevboxReady(sshBin, identity, "ec2-user", host, "22")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: readiness probe failed: %v\n", err)
-		os.Exit(1)
-	}
-	if !ready {
-		fmt.Fprintln(os.Stderr, "error: devbox is not ready yet — try again in a minute")
-		os.Exit(1)
-	}
-
-	if err := uninstallIdleStop(sshBin, identity, "ec2-user", host); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err := db.SetInstanceIdleStopMinutes(inst.AwsInstanceID, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("idle-stop removed for %s\n", inst.Name)
-}
-
+// helper: uninstallIdleStop uninstalls the idle stop service on the host ( needs ssh)
 func uninstallIdleStop(sshBin, identity, user, host string) error {
 	script := `set -euo pipefail
 systemctl disable --now devbox-idle-stop.timer 2>/dev/null || true
@@ -334,92 +420,7 @@ systemctl reset-failed devbox-idle-stop-boot.service 2>/dev/null || true
 	return nil
 }
 
-// update for a specific instance
-func updateIdleStop(ref, minutesStr string) {
-	minutesInt, err := strconv.Atoi(minutesStr)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: minutes must be an integer")
-		os.Exit(1)
-	}
-	if minutesInt <= 0 {
-		fmt.Fprintln(os.Stderr, "error: minutes must be greater than 0")
-		os.Exit(1)
-	}
-
-	rt := helper.MustOpenRuntime()
-	defer func() { _ = rt.Close() }()
-	target, err := helper.ResolveBoxTarget(rt, ref)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	db := rt.DB()
-
-	inst, err := db.GetInstanceByAwsInstanceIDAndUserID(target.ID, service.LocalUserID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	if !inst.IdleStopMinutes.Valid {
-		fmt.Fprintln(os.Stderr, "error: idle-stop is not set — use 'devbox idle-stop set <id|name> <minutes>' first")
-		os.Exit(1)
-	}
-
-	sshStatus, err := rt.GetSshStatus(target.ID, service.LocalUserID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	if !sshStatus.Ready {
-		fmt.Fprintln(os.Stderr, "error: box is not ready yet (EC2 status checks still pending)")
-		os.Exit(1)
-	}
-	if sshStatus.Instance == nil {
-		fmt.Fprintln(os.Stderr, "error: box is ready but instance details are unavailable, try again in a few minutes")
-		os.Exit(1)
-	}
-	box := sshStatus.Instance
-	if box.Status != "running" {
-		fmt.Fprintf(os.Stderr, "error: box is %s, not running\n", box.Status)
-		os.Exit(1)
-	}
-	host, err := box.SSHHost()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	sshBin, err := exec.LookPath("ssh")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: ssh binary not found in PATH")
-		os.Exit(1)
-	}
-
-	identity := defaultKeyPath()
-	ready, err := checkDevboxReady(sshBin, identity, "ec2-user", host, "22")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: readiness probe failed: %v\n", err)
-		os.Exit(1)
-	}
-	if !ready {
-		fmt.Fprintln(os.Stderr, "error: devbox is not ready yet — try again in a minute")
-		os.Exit(1)
-	}
-
-	if err := updateIdleStopOnHost(sshBin, identity, "ec2-user", host, minutesInt); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err := db.SetInstanceIdleStopMinutes(inst.AwsInstanceID, &minutesInt); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("last-activity reset on host")
-	fmt.Printf("idle-stop updated to %d minutes for %s\n", minutesInt, inst.Name)
-}
-
+// helper: updateIdleStopOnHost updates the idle stop service on the host ( needs ssh)
 func updateIdleStopOnHost(sshBin, identity, user, host string, minutes int) error {
 	script := fmt.Sprintf(`set -euo pipefail
 echo %d > /var/lib/devbox/idle-stop-minutes
@@ -443,28 +444,4 @@ date +%%s > /var/lib/devbox/last-activity
 		return fmt.Errorf("idle-stop update failed: %s", msg)
 	}
 	return nil
-}
-
-// show for a specific instance
-func showIdleStop(ref string) {
-	rt := helper.MustOpenRuntime()
-	defer func() { _ = rt.Close() }()
-	target, err := helper.ResolveBoxTarget(rt, ref)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	db := rt.DB()
-
-	inst, err := db.GetInstanceByAwsInstanceIDAndUserID(target.ID, service.LocalUserID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	if !inst.IdleStopMinutes.Valid {
-		fmt.Println("no idle stop set")
-		return
-	}
-	fmt.Printf("idle-stop is set to %d minutes for %s\n", inst.IdleStopMinutes.Int64, inst.Name)
 }
