@@ -99,3 +99,16 @@ func instancesToBoxes(instances []*service.Instance) []Box {
 	}
 	return boxes
 }
+
+// addSSHHostOrWarn writes the box into ~/.ssh/config; failures are non-fatal.
+func addSSHHostOrWarn(name string, inst *service.Instance) {
+	ip, err := inst.SSHHost()
+	if err != nil {
+		return
+	}
+	if err := service.AddHost(name, ip); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: box created but failed to update SSH config on this machine (~/.ssh/config): %v\n", err)
+		return
+	}
+	fmt.Printf("  SSH config: devbox-%s added to ~/.ssh/config\n", name)
+}

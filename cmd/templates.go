@@ -233,6 +233,7 @@ func createFromTemplates(name string, templateRefs []string, fromSnapshot string
 	if fromSnapshot == "" {
 		fmt.Printf("  Storage:   %d GB\n", volumeSizeGB)
 	}
+	addSSHHostOrWarn(b.Name, inst)
 	if b.PublicIP != "" {
 		fmt.Printf("  Public IP: %s\n", b.PublicIP)
 		fmt.Printf("\n  Connect:   devbox ssh %s\n", b.Name)

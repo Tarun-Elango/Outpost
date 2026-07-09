@@ -1,7 +1,6 @@
 package service
 
 import (
-	"fmt"
 	"time"
 
 	"devbox-cli/internal/config"
@@ -66,12 +65,7 @@ func SaveAWSCredentials(secret, accessKey, region string) error {
 	cfg.AwsRegion = region
 	cfg.AwsCredsUpdatedAt = time.Now()
 	cfg.Mode = "local"
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
-	fmt.Println("Credentials saved to ~/.devbox/config.json.")
-	fmt.Println("Keep this folder local only — do not sync or commit it.")
-	return nil
+	return config.Save(cfg)
 }
 
 // ClearAWSCredentials blanks the saved AWS credential fields in ~/.devbox/config.json.
@@ -82,9 +76,5 @@ func ClearAWSCredentials() error {
 	}
 	cfg.AwsSecret = ""
 	cfg.AwsAccessKey = ""
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
-	fmt.Println("AWS credentials cleared from ~/.devbox/config.json.")
-	return nil
+	return config.Save(cfg)
 }

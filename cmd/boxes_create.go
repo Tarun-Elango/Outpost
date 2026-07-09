@@ -90,7 +90,7 @@ func Create(args []string) {
 	if fromSnapshot == "" {
 		fmt.Printf("  Storage:   %d GB\n", volumeSizeGB)
 	}
-	fmt.Printf("  SSH config: devbox-%s added to ~/.ssh/config\n", b.Name)
+	addSSHHostOrWarn(b.Name, inst)
 	if b.PublicIP != "" {
 		fmt.Printf("  Public IP: %s\n", b.PublicIP)
 	} else {

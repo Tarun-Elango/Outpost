@@ -92,20 +92,11 @@ func idleSet(ref, minutesStr string) {
 		os.Exit(1)
 	}
 
-	sshStatus, err := rt.GetSshStatus(target.ID, service.LocalUserID)
+	box, err := rt.GetInstance(target.ID, service.LocalUserID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	if !sshStatus.Ready {
-		fmt.Fprintln(os.Stderr, "error: box is not ready yet (EC2 status checks still pending)")
-		os.Exit(1)
-	}
-	if sshStatus.Instance == nil {
-		fmt.Fprintln(os.Stderr, "error: box is ready but instance details are unavailable, try again in a few minutes")
-		os.Exit(1)
-	}
-	box := sshStatus.Instance
 	if box.Status != "running" {
 		fmt.Fprintf(os.Stderr, "error: box is %s, not running\n", box.Status)
 		os.Exit(1)
@@ -194,20 +185,11 @@ func deleteIdleStop(ref string) {
 		os.Exit(1)
 	}
 
-	sshStatus, err := rt.GetSshStatus(target.ID, service.LocalUserID)
+	box, err := rt.GetInstance(target.ID, service.LocalUserID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	if !sshStatus.Ready {
-		fmt.Fprintln(os.Stderr, "error: box is not ready yet (EC2 status checks still pending)")
-		os.Exit(1)
-	}
-	if sshStatus.Instance == nil {
-		fmt.Fprintln(os.Stderr, "error: box is ready but instance details are unavailable, try again in a few minutes")
-		os.Exit(1)
-	}
-	box := sshStatus.Instance
 	if box.Status != "running" {
 		fmt.Fprintf(os.Stderr, "error: box is %s, not running\n", box.Status)
 		os.Exit(1)
@@ -303,20 +285,11 @@ func updateIdleStop(ref, minutesStr string) {
 		os.Exit(1)
 	}
 
-	sshStatus, err := rt.GetSshStatus(target.ID, service.LocalUserID)
+	box, err := rt.GetInstance(target.ID, service.LocalUserID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	if !sshStatus.Ready {
-		fmt.Fprintln(os.Stderr, "error: box is not ready yet (EC2 status checks still pending)")
-		os.Exit(1)
-	}
-	if sshStatus.Instance == nil {
-		fmt.Fprintln(os.Stderr, "error: box is ready but instance details are unavailable, try again in a few minutes")
-		os.Exit(1)
-	}
-	box := sshStatus.Instance
 	if box.Status != "running" {
 		fmt.Fprintf(os.Stderr, "error: box is %s, not running\n", box.Status)
 		os.Exit(1)

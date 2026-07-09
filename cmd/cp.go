@@ -35,8 +35,7 @@ type cpTransfer struct {
 }
 
 type cpStatusResponse struct {
-	Ready    bool `json:"ready"`
-	Instance *Box `json:"instance"`
+	Instance *Box
 }
 
 // the default key path is ~/.ssh/id_ed25519
@@ -138,17 +137,16 @@ func buildSCPArgs(identity string, transfer cpTransfer, user, host, portArg stri
 	return append(argv, remote, transfer.Local)
 }
 
-// helper: cpStatusFromSSH maps an SSH status response into the cp command's status shape
-func cpStatusFromSSH(sshStatus *service.SshStatus) *cpStatusResponse {
-	status := &cpStatusResponse{Ready: sshStatus.Ready}
-	if sshStatus.Instance != nil {
-		box := instancesToBoxes([]*service.Instance{sshStatus.Instance})[0]
-		status.Instance = &box
+// helper: cpStatusFromInstance maps a live instance into the cp command's status shape
+func cpStatusFromInstance(inst *service.Instance) *cpStatusResponse {
+	if inst == nil {
+		return &cpStatusResponse{}
 	}
-	return status
+	box := instancesToBoxes([]*service.Instance{inst})[0]
+	return &cpStatusResponse{Instance: &box}
 }
 
-// helper: cpStatusForBox looks up the status of a box and returns a cpStatusResponse struct
+// helper: cpStatusForBox looks up a box and returns a cpStatusResponse struct
 func cpStatusForBox(ref string) (*cpStatusResponse, error) {
 	rt := helper.MustOpenRuntime()
 	defer func() { _ = rt.Close() }()
@@ -158,12 +156,12 @@ func cpStatusForBox(ref string) (*cpStatusResponse, error) {
 		return nil, err
 	}
 
-	sshStatus, err := rt.GetSshStatus(target.ID, service.LocalUserID)
+	inst, err := rt.GetInstance(target.ID, service.LocalUserID)
 	if err != nil {
 		return nil, err
 	}
 
-	return cpStatusFromSSH(sshStatus), nil
+	return cpStatusFromInstance(inst), nil
 }
 
 // CP copies one file between the local machine and a devbox using scp.
@@ -195,12 +193,8 @@ func CP(args []string) {
 		fmt.Fprintf(os.Stderr, "cp: %v\n", err)
 		os.Exit(1)
 	}
-	if !status.Ready {
-		fmt.Fprintln(os.Stderr, "cp: box is not ready yet.")
-		os.Exit(1)
-	}
 	if status.Instance == nil {
-		fmt.Fprintln(os.Stderr, "cp: server reported ready but returned no instance details, try the command again in a few minutes.")
+		fmt.Fprintln(os.Stderr, "cp: instance details are unavailable, try the command again in a few minutes.")
 		os.Exit(1)
 	}
 	if status.Instance.PublicIP == "" {

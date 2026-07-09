@@ -307,10 +307,10 @@ func (r InstanceRecord) NeedsAWSSync(status, ipAddress, instanceType, name strin
 	if r.Status != status {
 		return true
 	}
-	if nullStringValue(r.IPAddress) != ipAddress {
+	if StringValue(r.IPAddress) != ipAddress {
 		return true
 	}
-	if nullStringValue(r.InstanceType) != instanceType {
+	if StringValue(r.InstanceType) != instanceType {
 		return true
 	}
 	if name != "" && r.Name != name {
@@ -319,7 +319,8 @@ func (r InstanceRecord) NeedsAWSSync(status, ipAddress, instanceType, name strin
 	return false
 }
 
-func nullStringValue(n sql.NullString) string {
+// StringValue returns n.String when Valid, otherwise "".
+func StringValue(n sql.NullString) string {
 	if !n.Valid {
 		return ""
 	}

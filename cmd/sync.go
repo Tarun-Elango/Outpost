@@ -69,12 +69,8 @@ func Sync(args []string) {
 		fmt.Fprintf(os.Stderr, "sync: %v\n", err)
 		os.Exit(1)
 	}
-	if !status.Ready {
-		fmt.Fprintln(os.Stderr, "sync: box is not ready yet.")
-		os.Exit(1)
-	}
 	if status.Instance == nil {
-		fmt.Fprintln(os.Stderr, "sync: server reported ready but returned no instance details, try the command again in a few minutes.")
+		fmt.Fprintln(os.Stderr, "sync: instance details are unavailable, try the command again in a few minutes.")
 		os.Exit(1)
 	}
 	if status.Instance.PublicIP == "" {

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	localDb "devbox-cli/service/localDb"
 )
 
 // Template mirrors Lighthouse TemplateDto (id, name, description, startupScript).
@@ -35,8 +37,8 @@ func (r *Runtime) ListTemplates(userID string) ([]*Template, error) {
 		templates = append(templates, &Template{
 			ID:            rec.Name,
 			Name:          rec.Name,
-			Description:   nullStringValue(rec.Description),
-			StartupScript: normalizeStartupScript(nullStringValue(rec.StartupScript)),
+			Description:   localDb.StringValue(rec.Description),
+			StartupScript: normalizeStartupScript(localDb.StringValue(rec.StartupScript)),
 		})
 	}
 	return templates, nil
@@ -64,18 +66,11 @@ func (r *Runtime) SearchTemplates(userID, query string) ([]*Template, error) {
 		templates = append(templates, &Template{
 			ID:            rec.Name,
 			Name:          rec.Name,
-			Description:   nullStringValue(rec.Description),
-			StartupScript: normalizeStartupScript(nullStringValue(rec.StartupScript)),
+			Description:   localDb.StringValue(rec.Description),
+			StartupScript: normalizeStartupScript(localDb.StringValue(rec.StartupScript)),
 		})
 	}
 	return templates, nil
-}
-
-func nullStringValue(n sql.NullString) string {
-	if !n.Valid {
-		return ""
-	}
-	return n.String
 }
 
 // normalizeStartupScript strips a leading shebang and normalizes line endings.
@@ -176,8 +171,8 @@ func (r *Runtime) RenameTemplate(oldName, newName, userID string) (*Template, er
 		return &Template{
 			ID:            record.Name,
 			Name:          record.Name,
-			Description:   nullStringValue(record.Description),
-			StartupScript: normalizeStartupScript(nullStringValue(record.StartupScript)),
+			Description:   localDb.StringValue(record.Description),
+			StartupScript: normalizeStartupScript(localDb.StringValue(record.StartupScript)),
 		}, nil
 	}
 
@@ -191,8 +186,8 @@ func (r *Runtime) RenameTemplate(oldName, newName, userID string) (*Template, er
 	return &Template{
 		ID:            newName,
 		Name:          newName,
-		Description:   nullStringValue(record.Description),
-		StartupScript: normalizeStartupScript(nullStringValue(record.StartupScript)),
+		Description:   localDb.StringValue(record.Description),
+		StartupScript: normalizeStartupScript(localDb.StringValue(record.StartupScript)),
 	}, nil
 }
 
@@ -221,7 +216,7 @@ func (r *Runtime) CreateBoxFromTemplates(name string, templateIDs []string, publ
 			return nil, err
 		}
 
-		script := normalizeStartupScript(nullStringValue(record.StartupScript))
+		script := normalizeStartupScript(localDb.StringValue(record.StartupScript))
 		if script != "" {
 			startupScripts = append(startupScripts, script)
 		}

@@ -215,31 +215,6 @@ func (db *DB) ListSnapshotsByBoxIDAndUserID(boxID, userID string) ([]SnapshotRec
 	return records, rows.Err()
 }
 
-// ListSnapshotsByUserID returns all snapshots owned by userID.
-func (db *DB) ListSnapshotsByUserID(userID string) ([]SnapshotRecord, error) {
-	rows, err := db.conn.Query(`
-		SELECT `+snapshotSelectColumns+`
-		FROM snapshots
-		WHERE user_id = ?
-		ORDER BY created_at`,
-		userID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list snapshots: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var records []SnapshotRecord
-	for rows.Next() {
-		r, err := scanSnapshotRecord(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan snapshot: %w", err)
-		}
-		records = append(records, *r)
-	}
-	return records, rows.Err()
-}
-
 // ListSnapshotsByUserIDWithBoxAwsID returns snapshots for userID with aws_instance_id joined from instances.
 func (db *DB) ListSnapshotsByUserIDWithBoxAwsID(userID string) ([]SnapshotWithBoxAwsID, error) {
 	rows, err := db.conn.Query(`

@@ -295,27 +295,21 @@ func TestCPDefaultKeyPath(t *testing.T) {
 	})
 }
 
-// TestCPStatusFromSSH locks the runtime/API response mapping used by cpStatusForBox.
-// It feeds SshStatus values (ready/not ready, with/without instance details) and
-// expects a cpStatusResponse with Ready set and Instance mapped through instancesToBoxes.
-func TestCPStatusFromSSH(t *testing.T) {
-	t.Run("ready with instance", func(t *testing.T) {
-		got := cpStatusFromSSH(&service.SshStatus{
-			Ready: true,
-			Instance: &service.Instance{
-				ID:               "i-abc",
-				Name:             "mybox",
-				Status:           "running",
-				InstanceType:     "t3.micro",
-				IPAddress:        "203.0.113.10",
-				PrivateIPAddress: "10.0.0.5",
-				Region:           "us-east-1",
-				Provider:         "aws",
-			},
+// TestCPStatusFromInstance locks the instance→Box mapping used by cpStatusForBox.
+func TestCPStatusFromInstance(t *testing.T) {
+	t.Run("with instance", func(t *testing.T) {
+		got := cpStatusFromInstance(&service.Instance{
+			ID:               "i-abc",
+			Name:             "mybox",
+			Status:           "running",
+			InstanceType:     "t3.micro",
+			IPAddress:        "203.0.113.10",
+			PrivateIPAddress: "10.0.0.5",
+			Region:           "us-east-1",
+			Provider:         "aws",
 		})
 
 		want := &cpStatusResponse{
-			Ready: true,
 			Instance: &Box{
 				ID:           "i-abc",
 				Name:         "mybox",
@@ -328,23 +322,15 @@ func TestCPStatusFromSSH(t *testing.T) {
 			},
 		}
 		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("cpStatusFromSSH() = %#v, want %#v", got, want)
+			t.Fatalf("cpStatusFromInstance() = %#v, want %#v", got, want)
 		}
 	})
 
-	t.Run("ready without instance", func(t *testing.T) {
-		got := cpStatusFromSSH(&service.SshStatus{Ready: true})
-		want := &cpStatusResponse{Ready: true}
+	t.Run("nil instance", func(t *testing.T) {
+		got := cpStatusFromInstance(nil)
+		want := &cpStatusResponse{}
 		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("cpStatusFromSSH() = %#v, want %#v", got, want)
-		}
-	})
-
-	t.Run("not ready", func(t *testing.T) {
-		got := cpStatusFromSSH(&service.SshStatus{Ready: false})
-		want := &cpStatusResponse{Ready: false}
-		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("cpStatusFromSSH() = %#v, want %#v", got, want)
+			t.Fatalf("cpStatusFromInstance() = %#v, want %#v", got, want)
 		}
 	})
 }

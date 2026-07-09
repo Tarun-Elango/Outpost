@@ -25,5 +25,9 @@ func Rename(args []string) {
 		os.Exit(1)
 	}
 	fmt.Printf("Box %s (%s) renamed to %s.\n", target.Name, target.ID, renamed.Name)
+	if err := service.RenameHost(target.Name, newName); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: box renamed but failed to update SSH config on this machine (~/.ssh/config) after retries: %v\n", err)
+		return
+	}
 	fmt.Printf("SSH config: devbox-%s updated to devbox-%s\n", target.Name, renamed.Name)
 }
