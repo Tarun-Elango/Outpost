@@ -1,25 +1,18 @@
-name: security
+name: Test
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
-    paths:
-      - '.github/workflows/security.yml'
-      - 'cmd/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'helper/**'
-      - 'internal/**'
-      - 'main.go'
-      - 'scripts/**'
-      - 'service/**'
 
 permissions:
   contents: read
 
 jobs:
-  govulncheck:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -33,8 +26,5 @@ jobs:
         with:
           go-version: '1.26.5'
 
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
-
-      - name: Run vulnerability scan
-        run: govulncheck ./...
+      - name: Run all tests
+        run: go test ./...
