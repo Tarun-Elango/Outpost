@@ -231,7 +231,7 @@ func ensureIsolatedSecurityGroup(ctx context.Context, ec2Client *ec2.Client) (st
 			return "", awsclient.WrapError("describe vpcs", err)
 		}
 		if len(resp.Vpcs) == 0 {
-			return "", fmt.Errorf("no default vpc found")
+			return "", fmt.Errorf("no default vpc found, please create a default vpc in your aws account")
 		}
 		vpcID = aws.ToString(resp.Vpcs[0].VpcId)
 	}
