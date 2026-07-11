@@ -391,6 +391,51 @@ li {
   margin-top: 0;
 }
 
+/* Classic disclosure drawer (native <details>) */
+.drawer {
+  margin-top: 0.85rem;
+  padding: 0.5rem 0.75rem 0.65rem;
+  background: #fffef0;
+  border: 2px inset #c0c0c0;
+}
+
+.drawer summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: bold;
+  color: #000080;
+  font-size: 0.95rem;
+}
+
+.drawer summary::-webkit-details-marker {
+  display: none;
+}
+
+.drawer summary::before {
+  content: "▶ ";
+  font-size: 0.75em;
+}
+
+.drawer[open] summary::before {
+  content: "▼ ";
+}
+
+.drawer summary code {
+  font-weight: normal;
+}
+
+.drawer .note {
+  margin-top: 0.5rem;
+}
+
+.drawer ol {
+  margin-top: 0.5rem;
+}
+
+.drawer pre {
+  margin-top: 0.65rem;
+}
+
 @media (max-width: 520px) {
   .cmd-table {
     display: block;

@@ -1,6 +1,46 @@
 import DocOutline from './doc-outline'
 import DocPage from './doc-page'
 
+const leastPrivilegePolicy = `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OutpostEC2",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:RunInstances",
+        "ec2:TerminateInstances",
+        "ec2:StopInstances",
+        "ec2:StartInstances",
+        "ec2:RebootInstances",
+        "ec2:DescribeInstances",
+        "ec2:CreateTags",
+        "ec2:ModifyInstanceAttribute",
+        "ec2:ModifyVolume",
+        "ec2:DescribeVolumes",
+        "ec2:CreateVolume",
+        "ec2:DescribeImages",
+        "ec2:CreateImage",
+        "ec2:CreateSnapshot",
+        "ec2:DeregisterImage",
+        "ec2:DeleteSnapshot",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeSecurityGroups",
+        "ec2:CreateSecurityGroup",
+        "ec2:AuthorizeSecurityGroupIngress"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "OutpostSTS",
+      "Effect": "Allow",
+      "Action": ["sts:GetCallerIdentity"],
+      "Resource": "*"
+    }
+  ]
+}`
+
 const sections = [
   { id: 'aws-credentials', label: 'AWS credentials' },
   { id: 'wizard', label: 'Setup on outpost CLI' },
@@ -24,7 +64,10 @@ export default function SetupDoc() {
             <code>outpost</code>)
           </li>
           <li>
-            Attach <code>AmazonEC2FullAccess</code> and <code>AWSBudgetsActionsWithAWSResourceControlAccess</code> directly and create the user
+            Attach <code>AmazonEC2FullAccess</code> and{' '}
+            <code>AWSBudgetsActionsWithAWSResourceControlAccess</code>, then create the
+            user. Prefer tighter EC2 access? Open the drawer below instead of{' '}
+            <code>AmazonEC2FullAccess</code> (still attach the budgets policy).
           </li>
           <li>
             Open the user → <strong>Security credentials</strong> → create an access key
@@ -34,6 +77,37 @@ export default function SetupDoc() {
             Copy the access key and secret access key (secret access key shown only once)
           </li>
         </ol>
+
+        <details className="drawer" id="least-privilege">
+          <summary>
+            Least-privilege IAM — custom EC2 policy (instead of{' '}
+            <code>AmazonEC2FullAccess</code>)
+          </summary>
+          <p className="note">
+            Covers the EC2 and STS calls Outpost makes (create / start / stop / reboot /
+            resize / delete boxes, snapshots, import, security group setup, and{' '}
+            <code>outpost health</code>). Still attach{' '}
+            <code>AWSBudgetsActionsWithAWSResourceControlAccess</code> separately for
+            budgets.
+          </p>
+          <ol>
+            <li>
+              IAM → <strong>Policies</strong> → <strong>Create policy</strong> →{' '}
+              <strong>JSON</strong>
+            </li>
+            <li>
+              Paste the policy below, name it (e.g. <code>OutpostEC2</code>), and create
+              it
+            </li>
+            <li>
+              Attach <code>OutpostEC2</code> and{' '}
+              <code>AWSBudgetsActionsWithAWSResourceControlAccess</code> to your IAM user
+            </li>
+          </ol>
+          <pre>
+            <code>{leastPrivilegePolicy}</code>
+          </pre>
+        </details>
       </div>
 
       <div className="card">

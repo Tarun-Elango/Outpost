@@ -80,7 +80,7 @@ Commands:
   clear-creds         Clear saved AWS credentials from ~/.outpost/config.json
   health              Check config, AWS credentials, region, and database
   import              Sync EC2 instances and snapshots from your AWS account
-                      (configured region) into the local DB; prompts yes/no
+                      (configured region from setup) into the local DB; prompts yes/no
                       for each resource not already tracked. For boxes, may
                       ask for an existing .pem to authorize outpost SSH
 
