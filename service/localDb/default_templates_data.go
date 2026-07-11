@@ -309,21 +309,21 @@ func osScopedTemplates(osFamily, user, idPrefix string) []defaultTemplate {
 		"go":       "Go toolchain",
 		"rust":     "Rust toolchain",
 		"ruby":     "Ruby",
-		"node22":   "Node.js and npm",
+		"node22":   "Node.js 22 and npm",
 		"dotnet8":  ".NET 8 SDK",
 		"pip":      "Python pip",
-		"npm22":    "npm",
+		"npm22":    "npm via Node.js 22",
 		"bun":      "Bun JavaScript runtime",
-		"pnpm22":   "pnpm",
-		"yarn22":   "Yarn",
+		"pnpm22":   "pnpm (installs Node.js 22 if needed)",
+		"yarn22":   "Yarn (installs Node.js 22 if needed)",
 		"git":      "Git version control",
 		"docker":   "Docker engine",
 		"uv":       "uv Python package manager",
 		"maven":    "Apache Maven",
 		"gradle":   "Gradle build tool",
 		"cursor":   "Cursor Agent CLI",
-		"codex22":  "OpenAI Codex CLI",
-		"pi":       "Pi coding agent",
+		"codex22":  "OpenAI Codex CLI (installs Node.js 22 if needed)",
+		"pi":       "Pi coding agent (installs Node.js 22 if needed)",
 		"opencode": "OpenCode AI agent CLI",
 	}
 	suffixes := []string{
@@ -350,6 +350,22 @@ func osScopedTemplates(osFamily, user, idPrefix string) []defaultTemplate {
 	return templates
 }
 
+// debianEnsureNode22 installs Node.js 22 + npm via the NodeSource apt repo.
+// Distro nodejs packages on Ubuntu/Debian are often much older than 22.
+func debianEnsureNode22() string {
+	return `export DEBIAN_FRONTEND=noninteractive
+if ! command -v node >/dev/null 2>&1 || ! node -e 'process.exit(Number(process.versions.node.split(".")[0])>=22?0:1)' 2>/dev/null; then
+  apt-get update -qq
+  apt-get install -y ca-certificates curl gnupg
+  mkdir -p /etc/apt/keyrings
+  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+  apt-get update -qq
+  apt-get install -y nodejs
+fi
+`
+}
+
 func osTemplateScript(name, user, home string) string {
 	apt := func(packages string) string {
 		return fmt.Sprintf("export DEBIAN_FRONTEND=noninteractive\ncommand -v %s >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y %s)\n", packageCommand(name), packages)
@@ -367,14 +383,12 @@ func osTemplateScript(name, user, home string) string {
 		return apt("rustc cargo")
 	case "ruby":
 		return apt("ruby-full")
-	case "node22":
-		return apt("nodejs npm")
+	case "node22", "npm22":
+		return debianEnsureNode22()
 	case "dotnet8":
 		return apt("dotnet-sdk-8.0")
 	case "pip":
 		return apt("python3 python3-pip")
-	case "npm22":
-		return apt("nodejs npm")
 	case "git":
 		return apt("git")
 	case "maven":
@@ -388,15 +402,15 @@ func osTemplateScript(name, user, home string) string {
 	case "pnpm22", "yarn22", "codex22":
 		tool := map[string]string{"pnpm22": "pnpm", "yarn22": "yarn", "codex22": "@openai/codex"}[name]
 		command := map[string]string{"pnpm22": "pnpm", "yarn22": "yarn", "codex22": "codex"}[name]
-		return fmt.Sprintf("export DEBIAN_FRONTEND=noninteractive\ncommand -v node >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y nodejs npm)\nif ! runuser -u %s -- bash -lc 'command -v %s >/dev/null 2>&1'; then\n  runuser -u %s -- bash -lc 'npm install -g %s'\nfi\n", user, command, user, tool)
+		return debianEnsureNode22() + fmt.Sprintf("if ! runuser -u %s -- bash -lc 'command -v %s >/dev/null 2>&1'; then\n  runuser -u %s -- bash -lc 'npm install -g %s'\n  grep -q '\\.local/bin' %s/.bashrc 2>/dev/null || echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> %s/.bashrc\nfi\n", user, command, user, tool, home, home)
 	case "uv":
 		return fmt.Sprintf("if ! runuser -u %s -- bash -lc 'command -v uv >/dev/null 2>&1'; then\n  runuser -u %s -- bash -lc 'curl -LsSf https://astral.sh/uv/install.sh | sh'\n  grep -q '\\.local/bin' %s/.bashrc 2>/dev/null || echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> %s/.bashrc\nfi\n", user, user, home, home)
 	case "cursor":
-		return fmt.Sprintf("if ! runuser -u %s -- bash -lc 'command -v agent >/dev/null 2>&1'; then\n  runuser -u %s -- bash -lc 'curl https://cursor.com/install -fsS | bash'\nfi\n", user, user)
+		return fmt.Sprintf("if ! runuser -u %s -- bash -lc 'command -v agent >/dev/null 2>&1'; then\n  runuser -u %s -- bash -lc 'curl https://cursor.com/install -fsS | bash'\n  grep -q '\\.local/bin' %s/.bashrc 2>/dev/null || echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> %s/.bashrc\nfi\n", user, user, home, home)
 	case "pi":
-		return fmt.Sprintf("export DEBIAN_FRONTEND=noninteractive\ncommand -v node >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y nodejs npm xz-utils)\nrunuser -u %s -- bash -lc 'command -v pi >/dev/null 2>&1 || npm install -g --ignore-scripts @earendil-works/pi-coding-agent'\n", user)
+		return debianEnsureNode22() + fmt.Sprintf("runuser -u %s -- bash -lc 'command -v pi >/dev/null 2>&1 || npm install -g --ignore-scripts @earendil-works/pi-coding-agent'\n", user)
 	case "opencode":
-		return fmt.Sprintf("if ! runuser -u %s -- bash -lc 'command -v opencode >/dev/null 2>&1'; then\n  runuser -u %s -- bash -lc 'curl -fsSL https://opencode.ai/install | bash'\nfi\n", user, user)
+		return fmt.Sprintf("if ! runuser -u %s -- bash -lc 'command -v opencode >/dev/null 2>&1'; then\n  runuser -u %s -- bash -lc 'curl -fsSL https://opencode.ai/install | bash'\n  grep -q '\\.opencode/bin' %s/.bashrc 2>/dev/null || echo 'export PATH=\"$HOME/.opencode/bin:$PATH\"' >> %s/.bashrc\nfi\n", user, user, home, home)
 	}
 	return ""
 }
@@ -413,6 +427,10 @@ func packageCommand(name string) string {
 		return "node"
 	case "dotnet8":
 		return "dotnet"
+	case "rust":
+		return "rustc"
+	case "maven":
+		return "mvn"
 	default:
 		return name
 	}

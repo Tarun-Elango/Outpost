@@ -21,9 +21,9 @@ func SelectOSFamilyWithDefault(defaultFamily string, preamble ...string) (string
 			fmt.Println(line)
 		}
 		if len(preamble) > 0 {
-			fmt.Printf("  Using default: %s\n", service.MustOSProfile(service.DefaultOSFamily).DisplayName)
+			fmt.Printf("  Using default: %s\n", service.MustOSProfile(defaultFamily).DisplayName)
 		}
-		return service.DefaultOSFamily, nil
+		return defaultFamily, nil
 	}
 
 	selected := service.DefaultOSFamilyIndex()
@@ -36,7 +36,7 @@ func SelectOSFamilyWithDefault(defaultFamily string, preamble ...string) (string
 
 	restore, err := EnableRawMode()
 	if err != nil {
-		return service.DefaultOSFamily, nil
+		return defaultFamily, nil
 	}
 	defer restore()
 
