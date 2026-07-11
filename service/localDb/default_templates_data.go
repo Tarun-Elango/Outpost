@@ -384,7 +384,7 @@ func osTemplateScript(name, user, home string) string {
 	case "docker":
 		return fmt.Sprintf("export DEBIAN_FRONTEND=noninteractive\nif ! command -v docker >/dev/null 2>&1; then\n  apt-get update -qq && apt-get install -y docker.io\n  systemctl enable --now docker\nfi\ngetent group docker >/dev/null || groupadd docker\nusermod -aG docker %s 2>/dev/null || true\n", user)
 	case "bun":
-		return fmt.Sprintf("if ! command -v bun >/dev/null 2>&1; then\n  export BUN_INSTALL=/usr/local/bun\n  curl -fsSL https://bun.sh/install | bash\n  ln -sf /usr/local/bun/bin/bun /usr/local/bin/bun\nfi\n")
+		return "if ! command -v bun >/dev/null 2>&1; then\n  export BUN_INSTALL=/usr/local/bun\n  curl -fsSL https://bun.sh/install | bash\n  ln -sf /usr/local/bun/bin/bun /usr/local/bin/bun\nfi\n"
 	case "pnpm22", "yarn22", "codex22":
 		tool := map[string]string{"pnpm22": "pnpm", "yarn22": "yarn", "codex22": "@openai/codex"}[name]
 		command := map[string]string{"pnpm22": "pnpm", "yarn22": "yarn", "codex22": "codex"}[name]
