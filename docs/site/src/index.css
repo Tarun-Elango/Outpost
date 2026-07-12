@@ -201,8 +201,8 @@ a.byline:hover {
 .purpose-diagram {
   margin: 0 0 0.75rem;
   padding: 1rem;
-  background: #fff;
-  border: 1px solid #9bbddd;
+  background: #ffffcc;
+  border: 2px solid #000080;
 }
 
 .purpose-flow {
@@ -218,20 +218,27 @@ a.byline:hover {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 4.5rem;
-  padding: 0.6rem;
+  gap: 0.2rem;
+  min-height: 4.75rem;
+  padding: 0.7rem 0.55rem;
   text-align: center;
   background: #fff;
-  border: 1px solid #7899b8;
+  border: 2px solid #000080;
 }
 
 .purpose-step span {
-  font-size: 0.68rem;
-  color: #555;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 0.72rem;
+  font-weight: bold;
+  letter-spacing: 0.02em;
+  color: #333;
 }
 
 .purpose-step strong {
-  font-size: 0.9rem;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 1.05rem;
+  font-weight: bold;
+  line-height: 1.2;
   color: #000080;
 }
 
@@ -242,26 +249,30 @@ a.byline:hover {
 }
 
 .purpose-step-cli span {
-  color: #cbdcf0;
+  color: #d6e4f5;
 }
 
 .purpose-step-cli strong {
   font-family: "Courier New", Courier, monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
   color: #fff;
 }
 
 .purpose-arrow {
-  font-family: Arial, sans-serif;
-  font-size: 1.35rem;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 1.5rem;
+  font-weight: bold;
+  line-height: 1;
   color: #000080;
 }
 
 .purpose-diagram figcaption {
   margin-top: 0.75rem;
-  font-size: 0.78rem;
-  line-height: 1.3;
+  font-size: 0.85rem;
+  line-height: 1.35;
   text-align: center;
-  color: #25384a;
+  color: #000080;
 }
 
 @media (max-width: 520px) {
