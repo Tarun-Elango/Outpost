@@ -72,11 +72,11 @@ export default function AboutPage() {
           <ul>
             <li>macOS or Linux</li>
             <li>Your own AWS account (BYOK)</li>
-            <li>
+            {/* <li>
               On <code>PATH</code> you might need: <code>ssh</code> for SSH commands, <code>scp</code> for
               copy, <code>rsync</code> for folder sync, and <code>ssh-agent</code> for
               GitHub sync between your machine and a box
-            </li>
+            </li> */}
           </ul>
           <p className="note">
             outpost cli runs on your machine and uses your AWS account — no shared cloud,
@@ -100,7 +100,7 @@ export default function AboutPage() {
           <p className="note">
             Verify with the command <code>outpost ls</code>.
           </p>
-          <p className="note">
+          {/* <p className="note">
             If that worked, you&apos;re done — skip the sections below. They&apos;re
             optional alternatives for pinning a version or installing system-wide.
           </p>
@@ -120,7 +120,7 @@ export default function AboutPage() {
           </h3>
           <pre>
             <code>{`INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/Tarun-Elango/Outpost/latest/scripts/install.sh | sudo bash`}</code>
-          </pre>
+          </pre> */}
 
          
         </div>
