@@ -15,7 +15,7 @@ export default function AboutPage() {
         </p>
 
         <div className="card card-purpose">
-          <h2>Why outpost?</h2>
+          <h2>Why create an outpost?</h2>
           {/* <figure className="purpose-diagram">
             <div className="purpose-flow">
               <div className="purpose-step">
