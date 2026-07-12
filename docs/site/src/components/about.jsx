@@ -16,278 +16,72 @@ export default function AboutPage() {
 
         <div className="card card-purpose">
           <h2>Why outpost?</h2>
-          <div className="purpose-diagram">
-            <svg
-              width="672"
-              height="272"
-              viewBox="4 4 672 272"
-              xmlns="http://www.w3.org/2000/svg"
-              role="img"
-            >
-              <title>outpost architecture</title>
-              <desc>
-                Your laptop runs the outpost CLI; config and credentials stay local.
-                Commands like setup, create, start, ssh, sync, forward, stop, and
-                delete manage computers running in the cloud.
-              </desc>
-              <defs>
-                <marker
-                  id="arrow"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="7"
-                  markerHeight="7"
-                  orient="auto-start-reverse"
-                >
-                  <path
-                    d="M2 1L8 5L2 9"
-                    fill="none"
-                    stroke="#000080"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </marker>
-              </defs>
+          <figure className="purpose-diagram">
+            <div className="purpose-flow">
+              <section className="purpose-stage">
+                <div className="purpose-stage-label">
+                  <span>1</span>
+                  Your laptop
+                </div>
+                <div className="purpose-terminal">
+                  <div className="purpose-terminal-bar" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                    <small>terminal</small>
+                  </div>
+                  <code>
+                    <span>$ outpost create dev</span>
+                    <span className="purpose-terminal-success">✓ dev box ready</span>
+                    <span>$ outpost ssh dev</span>
+                  </code>
+                </div>
+                <p>Run one command. Credentials and config stay here.</p>
+              </section>
 
-              <rect
-                x="4"
-                y="4"
-                width="672"
-                height="272"
-                fill="none"
-                stroke="#000080"
-                strokeWidth="3"
-              />
-              <rect
-                x="9"
-                y="9"
-                width="662"
-                height="262"
-                fill="none"
-                stroke="#000080"
-                strokeWidth="1"
-              />
+              <div className="purpose-connection" aria-hidden="true">
+                <strong>OUTPOST</strong>
+                <span>AWS API</span>
+                <div>→</div>
+              </div>
 
-              <rect
-                x="40"
-                y="60"
-                width="220"
-                height="140"
-                fill="#FFFFCC"
-                stroke="#000080"
-                strokeWidth="2"
-              />
-              <rect
-                x="44"
-                y="64"
-                width="212"
-                height="132"
-                fill="none"
-                stroke="#000080"
-                strokeWidth="0.75"
-              />
-              <text
-                x="150"
-                y="86"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="16"
-                fontWeight="bold"
-                fill="#000080"
-              >
-                Your laptop
-              </text>
+              <section className="purpose-stage purpose-stage-cloud">
+                <div className="purpose-stage-label">
+                  <span>2</span>
+                  Your AWS account
+                </div>
+                <div className="purpose-boxes">
+                  <div className="purpose-box">
+                    <span className="purpose-status" />
+                    <strong>dev</strong>
+                    <small>EC2 · running</small>
+                  </div>
+                  <div className="purpose-box">
+                    <span className="purpose-status purpose-status-idle" />
+                    <strong>project-b</strong>
+                    <small>EC2 · stopped</small>
+                  </div>
+                </div>
+                <p>Private dev machines you own and control.</p>
+              </section>
+            </div>
 
-              <rect
-                x="64"
-                y="106"
-                width="172"
-                height="70"
-                fill="#000000"
-                stroke="#003300"
-                strokeWidth="1"
-              />
-              <text
-                x="150"
-                y="132"
-                textAnchor="middle"
-                fontFamily="Courier New, monospace"
-                fontSize="14"
-                fontWeight="bold"
-                fill="#33FF33"
-              >
-                outpost
-              </text>
-              <text
-                x="150"
-                y="150"
-                textAnchor="middle"
-                fontFamily="Courier New, monospace"
-                fontSize="14"
-                fontWeight="bold"
-                fill="#33FF33"
-              >
-                CLI
-              </text>
-              <text
-                x="150"
-                y="168"
-                textAnchor="middle"
-                fontFamily="Courier New, monospace"
-                fontSize="11"
-                fill="#33FF33"
-              >
-                $_
-              </text>
-
-              <line
-                x1="260"
-                y1="130"
-                x2="418"
-                y2="130"
-                stroke="#000080"
-                strokeWidth="2"
-                markerStart="url(#arrow)"
-                markerEnd="url(#arrow)"
-              />
-              <text
-                x="339"
-                y="112"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="12"
-                fill="#000080"
-              >
-                create · start · ssh · sync
-              </text>
-              <text
-                x="339"
-                y="152"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="12"
-                fill="#000080"
-              >
-                forward · stop · delete
-              </text>
-
-              <rect
-                x="420"
-                y="30"
-                width="220"
-                height="218"
-                fill="#FFFFCC"
-                stroke="#000080"
-                strokeWidth="2"
-              />
-              <rect
-                x="424"
-                y="34"
-                width="212"
-                height="210"
-                fill="none"
-                stroke="#000080"
-                strokeWidth="0.75"
-              />
-              <text
-                x="530"
-                y="56"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="16"
-                fontWeight="bold"
-                fill="#000080"
-              >
-                Cloud
-              </text>
-
-              <rect
-                x="444"
-                y="76"
-                width="172"
-                height="60"
-                fill="#FFFFFF"
-                stroke="#000080"
-                strokeWidth="1.5"
-              />
-              <text
-                x="530"
-                y="100"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="14"
-                fontWeight="bold"
-                fill="#000080"
-              >
-                Computer
-              </text>
-              <text
-                x="530"
-                y="120"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="12"
-                fill="#000080"
-              >
-                dev box 1
-              </text>
-
-              <rect
-                x="444"
-                y="150"
-                width="172"
-                height="60"
-                fill="#FFFFFF"
-                stroke="#000080"
-                strokeWidth="1.5"
-              />
-              <text
-                x="530"
-                y="174"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="14"
-                fontWeight="bold"
-                fill="#000080"
-              >
-                Computer 
-              </text>
-              <text
-                x="530"
-                y="194"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="12"
-                fill="#000080"
-              >
-                dev box 2
-              </text>
-              <text
-                x="530"
-                y="224"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="11"
-                fontStyle="italic"
-                fill="#000080"
-              >
-                spin up n boxes as needed
-              </text>
-
-              <text
-                x="150"
-                y="190"
-                textAnchor="middle"
-                fontFamily="Times New Roman, Times, serif"
-                fontSize="11"
-                fill="#000080"
-              >
-                config &amp; credentials stay local
-              </text>
-            </svg>
-          </div>
+            <div className="purpose-lifecycle" aria-label="Dev box lifecycle">
+              <span>create</span>
+              <b>→</b>
+              <span>start</span>
+              <b>→</b>
+              <span>ssh + sync</span>
+              <b>→</b>
+              <span>stop</span>
+              <b>→</b>
+              <span>delete</span>
+            </div>
+            <figcaption>
+              Outpost is the remote control for disposable development machines in
+              your own cloud.
+            </figcaption>
+          </figure>
           <ul>
             <li>
               <strong>Dedicated dev machine on the cloud</strong> — your own EC2
@@ -308,7 +102,7 @@ export default function AboutPage() {
             <li>
               <strong>Commands that simplify daily work</strong> —{' '}
               <code>ssh</code>, <code>sync</code>, <code>idle-stop</code>,{' '}
-              <code>git-sync</code>, and more
+              <code>git-sync</code>, <code>import</code>, and more
             </li>
             <li>
               <strong>Secure by default</strong> — AWS credentials and config stored
@@ -390,6 +184,9 @@ export default function AboutPage() {
             </li>
             <li>
               <code>outpost ssh {'<name>'}</code> — connect via SSH
+            </li>
+            <li>
+              <code>outpost import {'<url>'}</code> — import existing instance from aws.
             </li>
           </ul>
           <p className="note">
