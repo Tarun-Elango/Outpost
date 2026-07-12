@@ -142,7 +142,7 @@ export default function AboutPage() {
               <code>outpost ssh {'<name>'}</code> — connect via SSH
             </li>
             <li>
-              <code>outpost import {'<url>'}</code> — import existing instance from aws.
+              <code>outpost import </code> — import existing instance from aws.
             </li>
           </ul>
           <p className="note">
