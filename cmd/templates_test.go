@@ -43,6 +43,37 @@ func TestBuildTemplateListOutputShowsFullOS(t *testing.T) {
 	}
 }
 
+func TestTemplateTableStartupScriptUsesTerminalWidth(t *testing.T) {
+	templates := []*service.Template{{
+		Name:          "claude",
+		OSFamily:      service.DefaultOSFamily,
+		StartupScript: strings.Repeat("a", 80),
+	}}
+
+	var narrow, wide strings.Builder
+	if err := writeTemplateTable(&narrow, templates, 70); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeTemplateTable(&wide, templates, 130); err != nil {
+		t.Fatal(err)
+	}
+
+	narrowLines := strings.Split(strings.TrimSpace(narrow.String()), "\n")
+	wideLines := strings.Split(strings.TrimSpace(wide.String()), "\n")
+	if len(narrowLines[2]) != 70 {
+		t.Fatalf("narrow row length = %d, want 70: %q", len(narrowLines[2]), narrowLines[2])
+	}
+	if len(wideLines[2]) != 124 {
+		t.Fatalf("wide row length = %d, want 124: %q", len(wideLines[2]), wideLines[2])
+	}
+	if !strings.HasSuffix(narrowLines[2], "...") {
+		t.Fatalf("expected narrow script to truncate: %q", narrowLines[2])
+	}
+	if strings.HasSuffix(wideLines[2], "...") {
+		t.Fatalf("wide script should not truncate: %q", wideLines[2])
+	}
+}
+
 func TestFormatTemplateScriptFullPreservesLines(t *testing.T) {
 	script := "line one\nline two\n"
 	got := formatTemplateScriptFull(script)
