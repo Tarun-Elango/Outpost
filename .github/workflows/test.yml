@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Update trusted CA certificates
@@ -19,7 +19,13 @@ jobs:
           sudo apt-get install --only-upgrade -y ca-certificates
           dpkg-query -W ca-certificates
           installed=$(dpkg-query -W -f='${Version}' ca-certificates)
-          dpkg --compare-versions "$installed" ge 20260816ubuntu0.24.04.1
+          . /etc/os-release
+          case "$VERSION_ID" in
+            24.04) minimum=20260816ubuntu0.24.04.1 ;;
+            26.04) minimum=20260816ubuntu0.26.04.1 ;;
+            *) echo "Unverified Ubuntu version: $VERSION_ID"; exit 1 ;;
+          esac
+          dpkg --compare-versions "$installed" ge "$minimum"
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4
